@@ -8,34 +8,35 @@ from io import BytesIO
 import networkx as nx
 import seaborn as sns
 import time
-try:
-    import mppx
-except ImportError:
-    mppx = None
 
-# Custom CSS for Halloween Theme and Aesthetics
+# Custom CSS for Enterprise Look with Deep Navy and Orange Highlights
 st.markdown("""
     <style>
-    .main { background-color: #1a1a1a; padding: 20px; border-radius: 10px; }
+    .main { background-color: #1a2a44; padding: 20px; border-radius: 15px; }
     .stButton>button {
-        background-color: #e65100; color: #fff; border-radius: 8px; padding: 8px 16px;
-        transition: background-color 0.3s; border: 2px solid #ffca28;
+        background-color: #f28c38; color: #fff; border-radius: 10px; padding: 10px 20px;
+        transition: all 0.3s ease; border: 2px solid #f28c38; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    .stButton>button:hover { background-color: #ff9800; }
-    .stTabs [data-baseweb="tab"] { background-color: #333; color: #fff; font-size: 16px; font-weight: bold; border: 1px solid #ffca28; }
-    .stTabs [data-baseweb="tab"]:hover { background-color: #444; }
-    .stTabs [data-baseweb="tab"][aria-selected="true"] { background-color: #e65100; color: #fff; }
-    .stSidebar { background-color: #212121; border-right: 1px solid #ffca28; color: #fff; }
-    h1 { color: #ffca28; font-family: 'Roboto', sans-serif; text-shadow: 2px 2px #333; }
-    h2, h3 { color: #ffca28; font-family: 'Roboto', sans-serif; text-shadow: 1px 1px #333; }
-    .stAlert { border-radius: 8px; background-color: #424242; color: #fff; }
-    .left-column { background-color: #ffffff; padding: 10px; border-radius: 8px; color: #ffffff; }
-    .left-column * { color: #212121 !important; }
-    .right-column { background-color: #1a1a1a; padding: 10px; border-radius: 8px; }
+    .stButton>button:hover {
+        background-color: #d8701f; transform: scale(1.05); box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #2a4066; color: #fff; font-size: 16px; font-weight: bold; border-radius: 10px 10px 0 0;
+        border: 1px solid #f28c38; margin: 2px;
+    }
+    .stTabs [data-baseweb="tab"]:hover { background-color: #35548a; }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] { background-color: #f28c38; color: #fff; }
+    .stSidebar { background-color: #1a2a44; border-right: 1px solid #f28c38; color: #fff; border-radius: 15px 0 0 15px; }
+    h1 { color: #f28c38; font-family: 'Arial', sans-serif; font-size: 28px; font-weight: bold; text-shadow: 1px 1px #2a4066; }
+    h2, h3 { color: #f28c38; font-family: 'Arial', sans-serif; font-size: 20px; font-weight: bold; text-shadow: 1px 1px #2a4066; }
+    .stAlert { border-radius: 10px; background-color: #2a4066; color: #fff; }
+    .left-column { background-color: #fff; padding: 10px; border-radius: 10px; color: #1a2a44; }
+    .left-column * { color: #1a2a44 !important; }
+    .right-column { background-color: #2a4066; padding: 10px; border-radius: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🎃 Ani's Pulse: Project Schedule Simulation")
+st.title("Ani's Pulse: Project Schedule Simulator")
 
 # ----------------------------
 # PDE Simulation Function
@@ -130,7 +131,7 @@ if "simulation_data" not in st.session_state:
     st.session_state.simulation_data = {"tasks": None, "adjacency": None, "u_matrix": None, "num_tasks": None}
 
 # Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📝 Editor & Results", "🔗 Task Dependencies", "🔮 Eigenvalue Analysis", "🌊 Ripple Visualization"])
+tab1, tab2, tab3, tab4 = st.tabs(["📝 Editor & Results", "🔗 Task Dependencies", "🔮 Eigenvalue Analysis", "🌊 Risk Visualization"])
 
 with tab1:
     # Sidebar
@@ -269,31 +270,31 @@ with tab1:
 
             col1, col2 = st.columns([1, 1])
             with col1.container():
-                fig, ax = plt.subplots(figsize=(6,4), facecolor='#ffffff')
-                ax.plot(time, risk_curve, color="#d32f2f", lw=3, label="Diffusion Risk")
-                ax.plot(time, classical_risk, color="#1976d2", lw=3, label="Classical Risk")
-                ax.set_xlabel("Time (days)", fontsize=12, fontfamily='Roboto', color='#212121')
-                ax.set_ylabel("Average Completion (0–1)", fontsize=12, fontfamily='Roboto', color='#212121')
-                ax.set_title("Completion: Diffusion vs Classical (Risk)", fontsize=14, fontfamily='Roboto', pad=10, color='#212121')
-                ax.legend(frameon=True, facecolor='#ffffff', edgecolor='#90caf9', fontsize=10, loc='upper left')
-                ax.grid(True, linestyle="--", alpha=0.7, color='#90caf9')
-                ax.set_facecolor('#ffffff')
-                ax.tick_params(colors='#212121')
+                fig, ax = plt.subplots(figsize=(6,4), facecolor='#fff')
+                ax.plot(time, risk_curve, color="#d32f2f", lw=2, label="Diffusion Risk")
+                ax.plot(time, classical_risk, color="#1976d2", lw=2, label="Classical Risk")
+                ax.set_xlabel("Time (days)", fontsize=12, fontfamily='Arial', color='#1a2a44')
+                ax.set_ylabel("Average Completion (0–1)", fontsize=12, fontfamily='Arial', color='#1a2a44')
+                ax.set_title("Completion: Diffusion vs Classical (Risk)", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
+                ax.legend(frameon=True, facecolor='#fff', edgecolor='#f28c38', fontsize=10, loc='upper left')
+                ax.grid(True, linestyle="--", alpha=0.7, color='#2a4066')
+                ax.set_facecolor('#fff')
+                ax.tick_params(colors='#1a2a44')
                 st.pyplot(fig, use_container_width=True)
 
             with col2.container():
                 st.markdown('<div class="right-column">', unsafe_allow_html=True)
-                fig_gantt, axg = plt.subplots(figsize=(6,4), facecolor='#ffffff')
+                fig_gantt, axg = plt.subplots(figsize=(6,4), facecolor='#fff')
                 start_times = start_times_risk
                 finish_times = finish_times_risk
                 durations_gantt = durations_risk
-                colors = plt.cm.Reds(task_df["Risk (0-5)"].to_numpy() / 5.0)
+                colors = plt.cm.Oranges(task_df["Risk (0-5)"].to_numpy() / 5.0)
                 for i in range(num_tasks):
                     bar = axg.barh(i, durations_gantt[i], left=start_times[i], height=0.4,
-                                   align="center", color=colors[i], edgecolor="black", alpha=0.9)
+                                   align="center", color=colors[i], edgecolor="#1a2a44", alpha=0.9)
                     axg.text(start_times[i] + durations_gantt[i]/2, i,
                              f"{tasks[i]} ({durations_gantt[i]:.0f}d)",
-                             ha="center", va="center", fontsize=8, fontfamily='Roboto', color='white')
+                             ha="center", va="center", fontsize=8, fontfamily='Arial', color='#1a2a44')
                     mplcursors.cursor(bar).connect("add", lambda sel: sel.annotation.set_text(
                         f"Task: {tasks[sel.index]}\nDuration: {durations_gantt[sel.index]:.1f} days\nRisk: {task_df['Risk (0-5)'][sel.index]:.1f}"
                     ))
@@ -301,33 +302,33 @@ with tab1:
                     preds = np.where(adjacency[:,i] > 0)[0]
                     for p in preds:
                         axg.annotate("", xy=(start_times[i], i), xytext=(finish_times[p], p),
-                                     arrowprops=dict(arrowstyle="->", color="black", lw=1.5))
+                                     arrowprops=dict(arrowstyle="->", color="#1a2a44", lw=1.5))
                 axg.set_yticks(range(num_tasks))
-                axg.set_yticklabels([f"{i+1}" for i in range(num_tasks)], fontsize=10, fontfamily='Roboto')
+                axg.set_yticklabels([f"{i+1}" for i in range(num_tasks)], fontsize=10, fontfamily='Arial')
                 axg.invert_yaxis()
-                axg.set_xlabel("Time (days)", fontsize=12, fontfamily='Roboto')
-                axg.set_ylabel("Task ID", fontsize=12, fontfamily='Roboto')
-                axg.set_title("Gantt Chart (Risk)", fontsize=14, fontfamily='Roboto', pad=10)
-                axg.grid(True, axis="x", linestyle="--", alpha=0.7, color='#90caf9')
-                axg.set_facecolor('#ffffff')
+                axg.set_xlabel("Time (days)", fontsize=12, fontfamily='Arial')
+                axg.set_ylabel("Task ID", fontsize=12, fontfamily='Arial')
+                axg.set_title("Gantt Chart (Risk)", fontsize=14, fontfamily='Arial', pad=10)
+                axg.grid(True, axis="x", linestyle="--", alpha=0.7, color='#2a4066')
+                axg.set_facecolor('#fff')
                 st.pyplot(fig_gantt, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
             # 3D Completion Plot
             st.subheader("3D Completion Plot")
             st.write("3D view of risk-influenced schedules: PDE (red) and classical (blue).")
-            fig_3d = plt.figure(figsize=(8,6), facecolor='#ffffff')
+            fig_3d = plt.figure(figsize=(8,6), facecolor='#fff')
             ax_3d = fig_3d.add_subplot(111, projection='3d')
-            ax_3d.plot(time, [0]*len(time), risk_curve, color="#d32f2f", lw=3, label="Diffusion Risk")
-            ax_3d.plot(time, [1]*len(time), classical_risk, color="#1976d2", lw=3, label="Classical Risk")
-            ax_3d.set_xlabel("Time (days)", fontsize=12, fontfamily='Roboto', color='#212121')
-            ax_3d.set_ylabel("Model (0=PDE, 1=Classical)", fontsize=12, fontfamily='Roboto', color='#212121')
-            ax_3d.set_zlabel("Average Completion (0–1)", fontsize=12, fontfamily='Roboto', color='#212121')
-            ax_3d.set_title("3D Completion: Diffusion vs Classical (Risk)", fontsize=14, fontfamily='Roboto', pad=10, color='#212121')
-            ax_3d.legend(frameon=True, facecolor='#ffffff', edgecolor='#90caf9', fontsize=10)
-            ax_3d.set_facecolor('#ffffff')
-            ax_3d.grid(True, color='#90caf9', alpha=0.7)
-            ax_3d.tick_params(colors='#212121')
+            ax_3d.plot(time, [0]*len(time), risk_curve, color="#d32f2f", lw=2, label="Diffusion Risk")
+            ax_3d.plot(time, [1]*len(time), classical_risk, color="#1976d2", lw=2, label="Classical Risk")
+            ax_3d.set_xlabel("Time (days)", fontsize=12, fontfamily='Arial', color='#1a2a44')
+            ax_3d.set_ylabel("Model (0=PDE, 1=Classical)", fontsize=12, fontfamily='Arial', color='#1a2a44')
+            ax_3d.set_zlabel("Average Completion (0–1)", fontsize=12, fontfamily='Arial', color='#1a2a44')
+            ax_3d.set_title("3D Completion: Diffusion vs Classical (Risk)", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
+            ax_3d.legend(frameon=True, facecolor='#fff', edgecolor='#f28c38', fontsize=10)
+            ax_3d.set_facecolor('#fff')
+            ax_3d.grid(True, color='#2a4066', alpha=0.7)
+            ax_3d.tick_params(colors='#1a2a44')
             st.pyplot(fig_3d, use_container_width=True)
 
             # Export Options
@@ -356,13 +357,13 @@ with tab2:
             preds = np.where(adjacency[:,i] > 0)[0]
             for p in preds:
                 G.add_edge(p, i)
-        fig_dep, ax_dep = plt.subplots(figsize=(6,4), facecolor='#1a1a1a')
+        fig_dep, ax_dep = plt.subplots(figsize=(6,4), facecolor='#2a4066')
         pos = nx.spring_layout(G)
         nx.draw(G, pos, with_labels=True, labels=nx.get_node_attributes(G, 'label'),
-                node_color='#ffca28', node_size=800, font_size=9, font_family='Roboto',
-                font_weight='bold', edge_color='#e65100', arrows=True, arrowsize=15)
-        ax_dep.set_title("Task Dependency Graph", fontsize=14, fontfamily='Roboto', pad=10, color='#ffca28')
-        ax_dep.set_facecolor('#333')
+                node_color='#f28c38', node_size=800, font_size=9, font_family='Arial',
+                font_weight='bold', edge_color='#1a2a44', arrows=True, arrowsize=15)
+        ax_dep.set_title("Task Dependency Graph", fontsize=14, fontfamily='Arial', pad=10, color='#f28c38')
+        ax_dep.set_facecolor('#2a4066')
         st.pyplot(fig_dep, use_container_width=True)
 
 with tab3:
@@ -388,72 +389,87 @@ with tab3:
         st.write("Note: The second smallest eigenvalue of the Laplacian indicates graph connectivity/centrality. A larger value suggests better connectivity.")
 
         # Bar Chart of Real Eigenvalues
-        fig_bar, ax_bar = plt.subplots(figsize=(6,4), facecolor='#ffffff')
-        ax_bar.bar(range(len(np.real(eigenvalues))), np.real(eigenvalues), color='#e65100', edgecolor='#ffca28')
-        ax_bar.set_xlabel("Task Index", fontsize=12, fontfamily='Roboto', color='#212121')
-        ax_bar.set_ylabel("Real Eigenvalue", fontsize=12, fontfamily='Roboto', color='#212121')
-        ax_bar.set_title("Real Part of Eigenvalues", fontsize=14, fontfamily='Roboto', pad=10, color='#212121')
-        ax_bar.grid(True, linestyle="--", alpha=0.7, color='#90caf9')
-        ax_bar.set_facecolor('#ffffff')
-        ax_bar.tick_params(colors='#212121')
+        fig_bar, ax_bar = plt.subplots(figsize=(6,4), facecolor='#fff')
+        ax_bar.bar(range(len(np.real(eigenvalues))), np.real(eigenvalues), color='#f28c38', edgecolor='#1a2a44')
+        ax_bar.set_xlabel("Task Index", fontsize=12, fontfamily='Arial', color='#1a2a44')
+        ax_bar.set_ylabel("Real Eigenvalue", fontsize=12, fontfamily='Arial', color='#1a2a44')
+        ax_bar.set_title("Real Part of Eigenvalues", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
+        ax_bar.grid(True, linestyle="--", alpha=0.7, color='#2a4066')
+        ax_bar.set_facecolor('#fff')
+        ax_bar.tick_params(colors='#1a2a44')
         st.pyplot(fig_bar, use_container_width=True)
 
         # Styled Connectivity Matrix
         st.write("### Connectivity Matrix (Adjacency)")
         st.write("Visual representation of task dependencies.")
         df_connectivity = pd.DataFrame(adjacency, index=[f"Task {i+1}" for i in range(num_tasks)], columns=[f"Task {i+1}" for i in range(num_tasks)])
-        fig_heat, ax_heat = plt.subplots(figsize=(6,4), facecolor='#ffffff')
-        sns.heatmap(df_connectivity, annot=True, cmap="YlOrRd", cbar_kws={'label': 'Dependency Strength'}, ax=ax_heat)
-        ax_heat.set_xlabel("Task ID", fontsize=12, fontfamily='Roboto', color='#212121')
-        ax_heat.set_ylabel("Task ID", fontsize=12, fontfamily='Roboto', color='#212121')
-        ax_heat.set_title("Adjacency Matrix Heatmap", fontsize=14, fontfamily='Roboto', pad=10, color='#212121')
+        fig_heat, ax_heat = plt.subplots(figsize=(6,4), facecolor='#fff')
+        sns.heatmap(df_connectivity, annot=True, cmap="Oranges", cbar_kws={'label': 'Dependency Strength'}, ax=ax_heat)
+        ax_heat.set_xlabel("Task ID", fontsize=12, fontfamily='Arial', color='#1a2a44')
+        ax_heat.set_ylabel("Task ID", fontsize=12, fontfamily='Arial', color='#1a2a44')
+        ax_heat.set_title("Adjacency Matrix Heatmap", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
         st.pyplot(fig_heat, use_container_width=True)
 
 with tab4:
-    # Ripple Visualization
-    st.subheader("Ripple Visualization")
+    # Risk Visualization
+    st.subheader("Risk Visualization")
     if st.session_state.simulation_data["tasks"] is None or st.session_state.simulation_data["u_matrix"] is None:
-        st.info("Please run the simulation in the 'Editor & Results' tab to generate ripple data.")
+        st.info("Please run the simulation in the 'Editor & Results' tab to generate risk data.")
     else:
         tasks = st.session_state.simulation_data["tasks"]
         u_matrix = st.session_state.simulation_data["u_matrix"]
         num_tasks = st.session_state.simulation_data["num_tasks"]
         steps = u_matrix.shape[1]
         time_quarters = [int(i * steps / 4) for i in range(1, 5)]  # Quarters at 25%, 50%, 75%, 100%
+        task_df = st.session_state.task_df
 
-        st.write("### Completion Over Time (Quarters)")
-        st.write("Heatmap showing task completion (0–1) at quarter intervals of the project timeline (140 days).")
-        for idx, t in enumerate(time_quarters):
-            if t < steps:
-                fig_ripple, ax_ripple = plt.subplots(figsize=(6,4), facecolor='#ffffff')
-                sns.heatmap(u_matrix[:, t:t+1].T, annot=True, fmt=".2f", cmap="YlOrRd", cbar_kws={'label': 'Completion'},
-                            xticklabels=[f"T{idx * 25 + 25}%"], yticklabels=[], ax=ax_ripple)
-                ax_ripple.set_xlabel("Time Quarter", fontsize=12, fontfamily='Roboto', color='#212121')
-                ax_ripple.set_ylabel("", fontsize=12, fontfamily='Roboto', color='#212121')  # Remove y-axis label
-                ax_ripple.set_title(f"Completion at {idx * 25 + 25}% (Day {int(t * dt):.0f})", fontsize=14, fontfamily='Roboto', pad=10, color='#212121')
-                ax_ripple.set_facecolor('#ffffff')
-                st.pyplot(fig_ripple, use_container_width=True)
+        st.write("### Risk Impact by Task (Bar Chart)")
+        st.write("Bar heights reflect risk levels (0–5) and their impact on task durations, styled like MS Project.")
+        fig_risk, ax_risk = plt.subplots(figsize=(6,4), facecolor='#fff')
+        risks = task_df["Risk (0-5)"].to_numpy()
+        durations = task_df["Duration (days)"].to_numpy()
+        risk_impact = durations * np.maximum(1, risks) - durations  # Additional days due to risk
+        bars = ax_risk.bar(range(num_tasks), risk_impact, color='#f28c38', edgecolor='#1a2a44', alpha=0.9)
+        ax_risk.set_xticks(range(num_tasks))
+        ax_risk.set_xticklabels([f"Task {i+1}" for i in range(num_tasks)], rotation=45, fontsize=10, fontfamily='Arial')
+        ax_risk.set_xlabel("Task ID", fontsize=12, fontfamily='Arial', color='#1a2a44')
+        ax_risk.set_ylabel("Risk Impact (Additional Days)", fontsize=12, fontfamily='Arial', color='#1a2a44')
+        ax_risk.set_title("Risk Impact on Task Durations", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
+        ax_risk.grid(True, axis="y", linestyle="--", alpha=0.7, color='#2a4066')
+        ax_risk.set_facecolor('#fff')
+        ax_risk.tick_params(colors='#1a2a44')
+        for bar, risk in zip(bars, risks):
+            height = bar.get_height()
+            ax_risk.text(bar.get_x() + bar.get_width()/2, height,
+                         f"{risk:.1f}", ha="center", va="bottom", fontsize=8, color='#1a2a44')
+        st.pyplot(fig_risk, use_container_width=True)
 
         # Animation Controls
-        use_delay = st.checkbox("Use Delay (0.5s per frame)", value=True)
+        use_delay = st.checkbox("Use Delay (0.5s per frame)", value=False)
         if st.button("▶️ Play Animation"):
-            fig_anim, ax_anim = plt.subplots(figsize=(6,4), facecolor='#ffffff')
-            line, = ax_anim.plot([], [], 'o-', color='#d32f2f')
+            placeholder = st.empty()
+            fig_anim, ax_anim = plt.subplots(figsize=(6,4), facecolor='#fff')
+            line, = ax_anim.plot([], [], 'o-', color='#f28c38', lw=2, marker='o', markersize=10, markeredgecolor='#1a2a44', markeredgewidth=2)
+            ripple_marker, = ax_anim.plot([], [], 'o', color='#d8701f', markersize=15, alpha=0.7)
             ax_anim.set_xlim(0, num_tasks - 1)
             ax_anim.set_ylim(0, 1)
-            ax_anim.set_xlabel("Task Index", fontsize=12, fontfamily='Roboto', color='#212121')
-            ax_anim.set_ylabel("Completion (0–1)", fontsize=12, fontfamily='Roboto', color='#212121')
-            ax_anim.set_title("Completion Animation", fontsize=14, fontfamily='Roboto', pad=10, color='#212121')
-            ax_anim.grid(True, linestyle="--", alpha=0.7, color='#90caf9')
-            ax_anim.set_facecolor('#ffffff')
-            ax_anim.tick_params(colors='#212121')
+            ax_anim.set_xlabel("Task Index", fontsize=12, fontfamily='Arial', color='#1a2a44')
+            ax_anim.set_ylabel("Completion (0–1)", fontsize=12, fontfamily='Arial', color='#1a2a44')
+            ax_anim.set_title("Completion Ripple Animation", fontsize=14, fontfamily='Arial', pad=10, color='#f28c38')
+            ax_anim.grid(True, linestyle="--", alpha=0.7, color='#2a4066')
+            ax_anim.set_facecolor('#fff')
+            ax_anim.tick_params(colors='#1a2a44')
 
             for frame in range(0, steps, max(1, int(steps / 100))):
                 line.set_data(range(num_tasks), u_matrix[:, frame])
-                st.pyplot(fig_anim, use_container_width=True)
+                # Fix for ripple_marker: Use set_xdata and set_ydata for single point
+                max_completion_idx = np.argmax(u_matrix[:, frame])
+                ripple_marker.set_xdata([max_completion_idx])  # Sequence for x
+                ripple_marker.set_ydata([u_matrix[max_completion_idx, frame]])  # Sequence for y
+                placeholder.pyplot(fig_anim, use_container_width=True)
                 if use_delay:
-                    time.sleep(0.5)  # 0.5s delay
+                    time.sleep(0.5)  # Controlled delay
                 else:
                     time.sleep(0.01)  # Minimal delay for smooth playback
                 plt.close(fig_anim)  # Close to avoid memory buildup
-                st.experimental_rerun()  # Refresh to update plot
+            placeholder.empty()  # Clear after animation
