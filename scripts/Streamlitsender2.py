@@ -98,14 +98,23 @@ def run_pde(adjacency, durations, diffusion, risk_levels, start_times, T=140, dt
             if elapsed_time < 0:
                 continue  # Task hasn't started yet
             if len(preds) == 0 or all(u[p,t] >= 1.0 for p in preds):  # Start only when predecessors are complete
-                max_progress = min(1.0, elapsed_time / durations_risk[i]) if elapsed_time <= durations_risk[i] else 1.0
-                if u[i,t] < max_progress:
-                    du[i] += reaction(u[i,t], durations_risk[i])
-                # Apply diffusion as a delay factor only after duration is met
-                if elapsed_time >= durations_risk[i]:
-                    delay_factor = diffusion * sum(adjacency[j,i] * (1.0 - u[i,t]) for j in range(num_tasks) if adjacency[j,i] > 0)
-                    du[i] -= delay_factor  # Negative to slow down completion
-            u[:,t+1] = np.clip(u[:,t] + du * dt, 0, max_progress)
+                max_progress = min(1.0, elapsed_time / durations_risk[i])
+                base_progress = reaction(u[i,t], durations_risk[i]) if u[i,t] < 1.0 else 0
+                # Calculate delay based on predecessors' completion, scaled by diffusion
+                num_preds = len(preds)
+                if num_preds > 0 and elapsed_time >= durations_risk[i]:
+                    avg_pred_delay = diffusion * sum(1.0 - u[p,t] for p in preds) / num_preds if any(1.0 - u[p,t] > 0 for p in preds) else 0
+                    delay = min(avg_pred_delay, 0.1)  # Cap delay to avoid stalling
+                else:
+                    delay = 0
+                du[i] += base_progress - delay
+            u[:,t+1] = np.clip(u[:,t] + du * dt, 0, 1.0 if elapsed_time >= durations_risk[i] else max_progress)
+    # Ensure completion after duration
+    for i in range(num_tasks):
+        finish_time = start_times[i] + durations_risk[i]
+        finish_step = int(finish_time / dt)
+        if finish_step < steps:
+            u[i, finish_step:] = 1.0
     return u
 
 # ----------------------------
