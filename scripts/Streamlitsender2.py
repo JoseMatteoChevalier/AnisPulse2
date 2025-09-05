@@ -10,6 +10,9 @@ import seaborn as sns
 import json
 import os
 import time
+from matplotlib.animation import FuncAnimation, FFMpegWriter
+import tempfile
+import shutil
 
 # Custom CSS for Enterprise Look with Deep Navy, Orange Highlights, and Tab Transitions
 st.markdown("""
@@ -80,16 +83,32 @@ def export_mpp(task_df, start_times, finish_times):
     return mpp_df.to_csv(index=False)
 
 # ----------------------------
-# PDE Simulation Function with Reaction-Diffusion
+# PDE-Based Project Simulation
 # ----------------------------
-def reaction(u_i, duration):
-    return 1.0 / duration if duration > 0 else 0
+def reaction(u_i, duration, reaction_multiplier=2.0):
+    """
+    Task reaction rate, modifiable via reaction_multiplier.
+    """
+    return reaction_multiplier / duration if duration > 0 else 0
 
-def run_pde(adjacency, durations, diffusion, risk_levels, start_times, T=140, dt=0.01):
+def run_pde(adjacency, durations, diffusion, risk_levels, start_times,
+            T=140, dt=0.01, reaction_multiplier=2.0, max_delay=0.05):
+    """
+    PDE-based project progression with configurable parameters.
+
+    - adjacency: dependency matrix (1 if j -> i dependency)
+    - durations: expected duration of each task
+    - diffusion: diffusion coefficient for predecessor influence
+    - risk_levels: multiplier of task duration due to risk
+    - start_times: staggered start times of tasks
+    - reaction_multiplier: scales base reaction rate
+    - max_delay: max allowed delay from predecessors
+    """
     num_tasks = len(durations)
     steps = int(T/dt)
     u = np.zeros((num_tasks, steps+1))
     durations_risk = durations * np.maximum(1.0, risk_levels)
+
     for t in range(steps):
         du = np.zeros(num_tasks)
         for i in range(num_tasks):
@@ -97,41 +116,70 @@ def run_pde(adjacency, durations, diffusion, risk_levels, start_times, T=140, dt
             elapsed_time = t * dt - start_times[i]
             if elapsed_time < 0:
                 continue  # Task hasn't started yet
-            if len(preds) == 0 or all(u[p,t] >= 1.0 for p in preds):  # Start only when predecessors are complete
-                max_progress = min(1.0, elapsed_time / durations_risk[i])
-                base_progress = reaction(u[i,t], durations_risk[i]) if u[i,t] < 1.0 else 0
-                # Calculate delay based on predecessors' completion, scaled by diffusion
-                num_preds = len(preds)
-                if num_preds > 0 and elapsed_time >= durations_risk[i]:
-                    avg_pred_delay = diffusion * sum(1.0 - u[p,t] for p in preds) / num_preds if any(1.0 - u[p,t] > 0 for p in preds) else 0
-                    delay = min(avg_pred_delay, 0.1)  # Cap delay to avoid stalling
-                else:
-                    delay = 0
-                du[i] += base_progress - delay
-            u[:,t+1] = np.clip(u[:,t] + du * dt, 0, 1.0 if elapsed_time >= durations_risk[i] else max_progress)
-    # Ensure completion after duration
+
+            # Base progress rate
+            base_progress = reaction(u[i,t], durations_risk[i], reaction_multiplier) if u[i,t] < 1.0 else 0
+
+            # Calculate delay based on incomplete predecessors
+            delay = 0
+            if len(preds) > 0:
+                avg_pred_delay = diffusion * np.mean([1.0 - u[p,t] for p in preds])
+                delay = min(avg_pred_delay, max_delay)
+
+            # Allow net progress if near completion or positive rate
+            net_progress = base_progress - delay
+            max_progress = min(1.0, elapsed_time / durations_risk[i])
+            if net_progress > 0 or u[i,t] >= max_progress - 0.01:
+                du[i] += net_progress
+
+        u[:,t+1] = np.clip(u[:,t] + du * dt, 0, 1.0)
+
+    # Smooth completion transition
     for i in range(num_tasks):
         finish_time = start_times[i] + durations_risk[i]
         finish_step = int(finish_time / dt)
         if finish_step < steps:
-            u[i, finish_step:] = 1.0
+            transition_steps = int(0.1 / dt)  # 0.1 days transition window
+            for t in range(finish_step, min(finish_step + transition_steps, steps)):
+                u[i,t] = min(1.0, u[i,t] + (1.0 - u[i,t]) * (t - finish_step + 1) / transition_steps)
+            u[i, finish_step + transition_steps:] = 1.0
+
     return u
 
 # ----------------------------
 # Classical Completion Function
 # ----------------------------
-def compute_classical_completion(start_times, finish_times, durations, simulation_time):
-    num_tasks = len(durations)
+def compute_classical_completion(start_times, durations, risk_levels=None, simulation_time=None):
+    """
+    Classical task completion (linear ramp), optionally risk-adjusted.
+
+    - start_times: task start times
+    - durations: task durations
+    - risk_levels: optional multiplier for durations (default no risk)
+    - simulation_time: array of time points to evaluate completion
+    """
+    if risk_levels is None:
+        durations_risk = np.array(durations)
+    else:
+        durations_risk = np.array(durations) * np.maximum(1.0, np.array(risk_levels))
+
+    num_tasks = len(durations_risk)
+    if simulation_time is None:
+        max_time = np.max(start_times + durations_risk) * 1.1
+        simulation_time = np.linspace(0, max_time, int(max_time*100))  # 0.01 step
+
     u = np.zeros((num_tasks, len(simulation_time)))
+
     for i in range(num_tasks):
         for j, t in enumerate(simulation_time):
             if t < start_times[i]:
                 u[i, j] = 0
-            elif t < finish_times[i]:
-                u[i, j] = (t - start_times[i]) / durations[i]
+            elif t < start_times[i] + durations_risk[i]:
+                u[i, j] = (t - start_times[i]) / durations_risk[i]
             else:
                 u[i, j] = 1
-    return u.mean(axis=0)
+
+    return u, simulation_time
 
 # ----------------------------
 # MPP Import Function
@@ -199,15 +247,21 @@ if "task_df" not in st.session_state:
     })
 if "diffusion" not in st.session_state:
     st.session_state.diffusion = 0.001
+if "reaction_multiplier" not in st.session_state:
+    st.session_state.reaction_multiplier = 2.0
+if "max_delay" not in st.session_state:
+    st.session_state.max_delay = 0.05
 
 # Tabs
-tab1, tab2, tab3 = st.tabs(["📝 Editor & Results", "🔗 Task Dependencies", "🔮 Eigenvalue Analysis"])
+tab1, tab2, tab3, tab4 = st.tabs(["📝 Editor & Results", "🔗 Task Dependencies", "🔮 Eigenvalue Analysis", "📊 Completion Heatmap"])
 
 with tab1:
     # Sidebar
     with st.sidebar.expander("⚙️ Simulation Parameters", expanded=True):
         st.subheader("Simulation Parameters")
         diffusion = st.slider("Diffusion Coefficient", 0.001, 0.05, st.session_state.diffusion, 0.001, help="Finely tune delay propagation (0.001–0.05). Higher values increase delay from risk points.")
+        reaction_multiplier = st.slider("Reaction Multiplier", 1.0, 5.0, st.session_state.reaction_multiplier, 0.1, help="Scales the base reaction rate (1.0–5.0). Higher values speed up completion.")
+        max_delay = st.slider("Max Delay", 0.01, 0.1, st.session_state.max_delay, 0.01, help="Max delay from predecessors (0.01–0.1). Higher values increase delay impact.")
         col_diff1, col_diff2, col_diff3 = st.columns(3)
         with col_diff1:
             if st.button("Low (0.01)"):
@@ -221,8 +275,12 @@ with tab1:
             if st.button("High (0.05)"):
                 st.session_state.diffusion = 0.05
                 st.rerun()
-        diffusion = st.session_state.diffusion
+        st.session_state.diffusion = diffusion
+        st.session_state.reaction_multiplier = reaction_multiplier
+        st.session_state.max_delay = max_delay
         st.write("**Diffusion Factor**: Controls delay propagation from risk points (0.001–0.05), decreasing completion rate.")
+        st.write("**Reaction Multiplier**: Scales the base progress rate (1.0–5.0).")
+        st.write("**Max Delay**: Caps delay from predecessors (0.01–0.1).")
         st.write("**Risk**: Values (0–5) directly multiply task durations (e.g., risk=2 means duration * 2).")
 
     # Project Editor
@@ -338,13 +396,15 @@ with tab1:
             simulation_time = np.linspace(0, T, int(T/dt)+1)
 
             # Diffusion-based Simulation
-            u_risk = run_pde(adjacency, durations, diffusion, risks, start_times_risk, T, dt)
+            u_risk = run_pde(adjacency, durations, st.session_state.diffusion, risks, start_times_risk, T, dt,
+                           st.session_state.reaction_multiplier, st.session_state.max_delay)
             risk_curve = u_risk.mean(axis=0)
             st.session_state.simulation_data["u_matrix"] = u_risk
             progress_bar.progress(50)
 
             # Classical Schedule
-            classical_risk = compute_classical_completion(start_times_risk, finish_times_risk, durations_risk, simulation_time)
+            classical_u, sim_time = compute_classical_completion(start_times_risk, durations, risks, simulation_time)
+            classical_risk = classical_u.mean(axis=0)
             progress_bar.progress(100)
 
             # Calculate Time to Completion
@@ -541,3 +601,70 @@ with tab3:
         ax_heat.set_ylabel("Task ID", fontsize=12, fontfamily='Arial', color='#1a2a44')
         ax_heat.set_title("Adjacency Matrix Heatmap", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
         st.pyplot(fig_heat, use_container_width=True)
+
+with tab4:
+    # Completion Heatmap
+    st.subheader("Completion Heatmap")
+    if st.session_state.simulation_data["tasks"] is None:
+        st.info("Please run the simulation in the 'Editor & Results' tab to generate heatmap data.")
+    else:
+        tasks = st.session_state.simulation_data["tasks"]
+        u_risk = st.session_state.simulation_data["u_matrix"]
+        classical_u, sim_time = compute_classical_completion(start_times_risk, durations, risks, simulation_time)
+
+        # Check if ffmpeg is available
+        if shutil.which('ffmpeg') is None:
+            st.error("FFmpeg is not installed. Please install it to generate animations. On macOS, use `brew install ffmpeg` or follow instructions at https://ffmpeg.org/download.html.")
+        else:
+            # Create animated heatmap for PDE
+            st.subheader("PDE Completion Animation")
+            fig_pde, ax_pde = plt.subplots(figsize=(10, 6), facecolor='#fff')
+            heatmap_pde = ax_pde.imshow(u_risk[:, :1], cmap="Oranges", aspect='auto', vmin=0, vmax=1)
+            ax_pde.set_xticks(np.arange(0, len(simulation_time), int(len(simulation_time)/10)))
+            ax_pde.set_xticklabels([f"{x:.1f}" for x in simulation_time[::int(len(simulation_time)/10)]])
+            ax_pde.set_yticks(np.arange(len(tasks)))
+            ax_pde.set_yticklabels(tasks)
+            ax_pde.set_xlabel("Time (days)", fontsize=12, fontfamily='Arial', color='#1a2a44')
+            ax_pde.set_ylabel("Tasks", fontsize=12, fontfamily='Arial', color='#1a2a44')
+            ax_pde.set_title("PDE Task Completion Progression", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
+            plt.colorbar(heatmap_pde, ax=ax_pde, label="Completion %")
+            ax_pde.tick_params(colors='#1a2a44')
+
+            def update(frame):
+                heatmap_pde.set_array(u_risk[:, :frame+1])
+                return [heatmap_pde]
+
+            ani_pde = FuncAnimation(fig_pde, update, frames=range(1, u_risk.shape[1]), interval=50, blit=True)
+            writer = FFMpegWriter(fps=20, metadata=dict(artist='Me'), bitrate=1800)
+            with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_file:
+                ani_pde.save(tmp_file.name, writer=writer, dpi=100)
+                tmp_file.seek(0)
+                with open(tmp_file.name, 'rb') as video_file:
+                    video_bytes = video_file.read()
+                    st.video(video_bytes)
+
+            # Create animated heatmap for Classical
+            st.subheader("Classical Completion Animation")
+            fig_classical, ax_classical = plt.subplots(figsize=(10, 6), facecolor='#fff')
+            heatmap_classical = ax_classical.imshow(classical_u[:, :1], cmap="Oranges", aspect='auto', vmin=0, vmax=1)
+            ax_classical.set_xticks(np.arange(0, len(simulation_time), int(len(simulation_time)/10)))
+            ax_classical.set_xticklabels([f"{x:.1f}" for x in simulation_time[::int(len(simulation_time)/10)]])
+            ax_classical.set_yticks(np.arange(len(tasks)))
+            ax_classical.set_yticklabels(tasks)
+            ax_classical.set_xlabel("Time (days)", fontsize=12, fontfamily='Arial', color='#1a2a44')
+            ax_classical.set_ylabel("Tasks", fontsize=12, fontfamily='Arial', color='#1a2a44')
+            ax_classical.set_title("Classical Task Completion Progression", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
+            plt.colorbar(heatmap_classical, ax=ax_classical, label="Completion %")
+            ax_classical.tick_params(colors='#1a2a44')
+
+            def update(frame):
+                heatmap_classical.set_array(classical_u[:, :frame+1])
+                return [heatmap_classical]
+
+            ani_classical = FuncAnimation(fig_classical, update, frames=range(1, classical_u.shape[1]), interval=50, blit=True)
+            with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_file:
+                ani_classical.save(tmp_file.name, writer=writer, dpi=100)
+                tmp_file.seek(0)
+                with open(tmp_file.name, 'rb') as video_file:
+                    video_bytes = video_file.read()
+                    st.video(video_bytes)
