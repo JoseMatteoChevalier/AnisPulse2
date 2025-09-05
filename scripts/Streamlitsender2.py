@@ -7,7 +7,7 @@ import mplcursors
 from io import BytesIO
 import networkx as nx
 import seaborn as sns
-from matplotlib.animation import FuncAnimation
+import time
 try:
     import mppx
 except ImportError:
@@ -127,7 +127,7 @@ time = np.linspace(0, T, int(T/dt)+1)
 
 # Initialize session state
 if "simulation_data" not in st.session_state:
-    st.session_state.simulation_data = {"tasks": None, "adjacency": None, "u_matrix": None}
+    st.session_state.simulation_data = {"tasks": None, "adjacency": None, "u_matrix": None, "num_tasks": None}
 
 # Tabs
 tab1, tab2, tab3, tab4 = st.tabs(["📝 Editor & Results", "🔗 Task Dependencies", "🔮 Eigenvalue Analysis", "🌊 Ripple Visualization"])
@@ -212,6 +212,7 @@ with tab1:
         valid = True
         tasks = task_df["Task"].tolist()
         num_tasks = len(tasks)
+        st.session_state.simulation_data["num_tasks"] = num_tasks
         for i, dep in enumerate(task_df["Dependencies (IDs)"]):
             if dep:
                 dep_list = [d.strip() for d in dep.split(",")]
@@ -371,6 +372,7 @@ with tab3:
         st.info("Please run the simulation in the 'Editor & Results' tab to generate eigenvalue data.")
     else:
         adjacency = st.session_state.simulation_data["adjacency"]
+        num_tasks = st.session_state.simulation_data["num_tasks"]
         eigenvalues, _ = np.linalg.eig(adjacency.astype(float))
         # Compute Laplacian for second eigenvalue (centrality)
         degree = np.sum(adjacency, axis=1)
@@ -415,7 +417,7 @@ with tab4:
     else:
         tasks = st.session_state.simulation_data["tasks"]
         u_matrix = st.session_state.simulation_data["u_matrix"]
-        num_tasks = len(tasks)
+        num_tasks = st.session_state.simulation_data["num_tasks"]
         steps = u_matrix.shape[1]
         time_quarters = [int(i * steps / 4) for i in range(1, 5)]  # Quarters at 25%, 50%, 75%, 100%
 
@@ -425,29 +427,33 @@ with tab4:
             if t < steps:
                 fig_ripple, ax_ripple = plt.subplots(figsize=(6,4), facecolor='#ffffff')
                 sns.heatmap(u_matrix[:, t:t+1].T, annot=True, fmt=".2f", cmap="YlOrRd", cbar_kws={'label': 'Completion'},
-                            xticklabels=[f"T{idx * 25}%"], yticklabels=tasks, ax=ax_ripple)
+                            xticklabels=[f"T{idx * 25 + 25}%"], yticklabels=[], ax=ax_ripple)
                 ax_ripple.set_xlabel("Time Quarter", fontsize=12, fontfamily='Roboto', color='#212121')
-                ax_ripple.set_ylabel("Tasks", fontsize=12, fontfamily='Roboto', color='#212121')
+                ax_ripple.set_ylabel("", fontsize=12, fontfamily='Roboto', color='#212121')  # Remove y-axis label
                 ax_ripple.set_title(f"Completion at {idx * 25 + 25}% (Day {int(t * dt):.0f})", fontsize=14, fontfamily='Roboto', pad=10, color='#212121')
                 ax_ripple.set_facecolor('#ffffff')
                 st.pyplot(fig_ripple, use_container_width=True)
 
         # Animation Controls
-        delay = st.slider("Animation Delay (seconds)", 0.0, 1.0, 0.1, 0.1)
-        fig_anim, ax_anim = plt.subplots(figsize=(6,4), facecolor='#ffffff')
-        line, = ax_anim.plot([], [], 'o-', color='#d32f2f')
-        ax_anim.set_xlim(0, num_tasks - 1)
-        ax_anim.set_ylim(0, 1)
-        ax_anim.set_xlabel("Task Index", fontsize=12, fontfamily='Roboto', color='#212121')
-        ax_anim.set_ylabel("Completion (0–1)", fontsize=12, fontfamily='Roboto', color='#212121')
-        ax_anim.set_title("Completion Animation", fontsize=14, fontfamily='Roboto', pad=10, color='#212121')
-        ax_anim.grid(True, linestyle="--", alpha=0.7, color='#90caf9')
-        ax_anim.set_facecolor('#ffffff')
-        ax_anim.tick_params(colors='#212121')
+        use_delay = st.checkbox("Use Delay (0.5s per frame)", value=True)
+        if st.button("▶️ Play Animation"):
+            fig_anim, ax_anim = plt.subplots(figsize=(6,4), facecolor='#ffffff')
+            line, = ax_anim.plot([], [], 'o-', color='#d32f2f')
+            ax_anim.set_xlim(0, num_tasks - 1)
+            ax_anim.set_ylim(0, 1)
+            ax_anim.set_xlabel("Task Index", fontsize=12, fontfamily='Roboto', color='#212121')
+            ax_anim.set_ylabel("Completion (0–1)", fontsize=12, fontfamily='Roboto', color='#212121')
+            ax_anim.set_title("Completion Animation", fontsize=14, fontfamily='Roboto', pad=10, color='#212121')
+            ax_anim.grid(True, linestyle="--", alpha=0.7, color='#90caf9')
+            ax_anim.set_facecolor('#ffffff')
+            ax_anim.tick_params(colors='#212121')
 
-        def update(frame):
-            line.set_data(range(num_tasks), u_matrix[:, frame])
-            return line,
-
-        ani = FuncAnimation(fig_anim, update, frames=range(0, steps, max(1, int(steps / 100))), interval=delay * 1000, blit=True)
-        st.pyplot(fig_anim, use_container_width=True)
+            for frame in range(0, steps, max(1, int(steps / 100))):
+                line.set_data(range(num_tasks), u_matrix[:, frame])
+                st.pyplot(fig_anim, use_container_width=True)
+                if use_delay:
+                    time.sleep(0.5)  # 0.5s delay
+                else:
+                    time.sleep(0.01)  # Minimal delay for smooth playback
+                plt.close(fig_anim)  # Close to avoid memory buildup
+                st.experimental_rerun()  # Refresh to update plot
