@@ -7,9 +7,10 @@ import mplcursors
 from io import BytesIO
 import networkx as nx
 import seaborn as sns
-import time
+import json
+import os
 
-# Custom CSS for Enterprise Look with Deep Navy and Orange Highlights
+# Custom CSS for Enterprise Look with Deep Navy, Orange Highlights, and Tab Transitions
 st.markdown("""
     <style>
     .main { background-color: #1a2a44; padding: 20px; border-radius: 15px; }
@@ -22,7 +23,7 @@ st.markdown("""
     }
     .stTabs [data-baseweb="tab"] {
         background-color: #2a4066; color: #fff; font-size: 16px; font-weight: bold; border-radius: 10px 10px 0 0;
-        border: 1px solid #f28c38; margin: 2px;
+        border: 1px solid #f28c38; margin: 2px; transition: opacity 0.3s ease;
     }
     .stTabs [data-baseweb="tab"]:hover { background-color: #35548a; }
     .stTabs [data-baseweb="tab"][aria-selected="true"] { background-color: #f28c38; color: #fff; }
@@ -37,6 +38,22 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("Ani's Pulse: Project Schedule Simulator")
+st.write("**Ready to feel the pulse**")
+
+# Autosave function
+def save_task_list(task_df):
+    save_path = "task_list.json"
+    task_dict = task_df.to_dict(orient="records")
+    with open(save_path, "w") as f:
+        json.dump(task_dict, f)
+
+def load_task_list():
+    save_path = "task_list.json"
+    if os.path.exists(save_path):
+        with open(save_path, "r") as f:
+            task_dict = json.load(f)
+            return pd.DataFrame(task_dict)
+    return None
 
 # ----------------------------
 # PDE Simulation Function
@@ -129,6 +146,16 @@ time = np.linspace(0, T, int(T/dt)+1)
 # Initialize session state
 if "simulation_data" not in st.session_state:
     st.session_state.simulation_data = {"tasks": None, "adjacency": None, "u_matrix": None, "num_tasks": None}
+if "task_df" not in st.session_state:
+    loaded_df = load_task_list()
+    st.session_state.task_df = loaded_df if loaded_df is not None else pd.DataFrame({
+        "Select": [False] * len(default_tasks),
+        "ID": list(range(1, len(default_tasks)+1)),
+        "Task": default_tasks,
+        "Duration (days)": default_durations,
+        "Dependencies (IDs)": default_deps,
+        "Risk (0-5)": default_risks
+    })
 
 # Tabs
 tab1, tab2, tab3, tab4 = st.tabs(["📝 Editor & Results", "🔗 Task Dependencies", "🔮 Eigenvalue Analysis", "🌊 Risk Visualization"])
@@ -154,18 +181,9 @@ with tab1:
             st.error(error)
         else:
             st.session_state.task_df = df
+            save_task_list(df)  # Autosave on import
             st.success("MPP file imported successfully. Edit tasks below if needed.")
             st.rerun()
-
-    if "task_df" not in st.session_state:
-        st.session_state.task_df = pd.DataFrame({
-            "Select": [False] * len(default_tasks),
-            "ID": list(range(1, len(default_tasks)+1)),
-            "Task": default_tasks,
-            "Duration (days)": default_durations,
-            "Dependencies (IDs)": default_deps,
-            "Risk (0-5)": default_risks
-        })
 
     # Data editor
     task_df = st.data_editor(
@@ -179,7 +197,8 @@ with tab1:
             "Duration (days)": st.column_config.NumberColumn(min_value=1.0, step=1.0),
             "Dependencies (IDs)": st.column_config.TextColumn(),
             "Risk (0-5)": st.column_config.NumberColumn(min_value=0, max_value=5, step=0.1)
-        }
+        },
+        on_change=save_task_list, args=(st.session_state.task_df,)  # Autosave on edit
     )
 
     # Persist edits
@@ -199,6 +218,7 @@ with tab1:
                 "Risk (0-5)": 0.0
             }
             st.session_state.task_df = pd.concat([st.session_state.task_df, pd.DataFrame([new_row])], ignore_index=True)
+            save_task_list(st.session_state.task_df)  # Autosave on add
             st.rerun()
     with col_delete:
         if st.button("🗑️ Delete Selected Rows"):
@@ -206,6 +226,7 @@ with tab1:
             if not selected_indices.empty:
                 st.session_state.task_df = st.session_state.task_df.drop(selected_indices).reset_index(drop=True)
                 st.session_state.task_df["ID"] = pd.Series(range(1, len(st.session_state.task_df) + 1))
+                save_task_list(st.session_state.task_df)  # Autosave on delete
                 st.rerun()
 
     # Recalculate Simulation
@@ -295,9 +316,9 @@ with tab1:
                     axg.text(start_times[i] + durations_gantt[i]/2, i,
                              f"{tasks[i]} ({durations_gantt[i]:.0f}d)",
                              ha="center", va="center", fontsize=8, fontfamily='Arial', color='#1a2a44')
-                    mplcursors.cursor(bar).connect("add", lambda sel: sel.annotation.set_text(
+                    mplcursors.cursor(bar, hover=True).connect("add", lambda sel: sel.annotation.set_text(
                         f"Task: {tasks[sel.index]}\nDuration: {durations_gantt[sel.index]:.1f} days\nRisk: {task_df['Risk (0-5)'][sel.index]:.1f}"
-                    ))
+                    ).set_alpha(0.0).set_alpha(1.0, duration=0.5))  # Pulsing tooltip
                 for i in range(num_tasks):
                     preds = np.where(adjacency[:,i] > 0)[0]
                     for p in preds:
@@ -420,7 +441,6 @@ with tab4:
         u_matrix = st.session_state.simulation_data["u_matrix"]
         num_tasks = st.session_state.simulation_data["num_tasks"]
         steps = u_matrix.shape[1]
-        time_quarters = [int(i * steps / 4) for i in range(1, 5)]  # Quarters at 25%, 50%, 75%, 100%
         task_df = st.session_state.task_df
 
         st.write("### Risk Impact by Task (Bar Chart)")
@@ -442,34 +462,28 @@ with tab4:
             height = bar.get_height()
             ax_risk.text(bar.get_x() + bar.get_width()/2, height,
                          f"{risk:.1f}", ha="center", va="bottom", fontsize=8, color='#1a2a44')
+            mplcursors.cursor(bar, hover=True).connect("add", lambda sel: sel.annotation.set_text(
+                f"Task: {tasks[sel.index]}\nDuration: {durations[sel.index]:.1f} days\nRisk: {risks[sel.index]:.1f}"
+            ).set_alpha(0.0).set_alpha(1.0, duration=0.5))  # Pulsing tooltip
         st.pyplot(fig_risk, use_container_width=True)
 
-        # Animation Controls
-        use_delay = st.checkbox("Use Delay (0.5s per frame)", value=False)
-        if st.button("▶️ Play Animation"):
-            placeholder = st.empty()
-            fig_anim, ax_anim = plt.subplots(figsize=(6,4), facecolor='#fff')
-            line, = ax_anim.plot([], [], 'o-', color='#f28c38', lw=2, marker='o', markersize=10, markeredgecolor='#1a2a44', markeredgewidth=2)
-            ripple_marker, = ax_anim.plot([], [], 'o', color='#d8701f', markersize=15, alpha=0.7)
-            ax_anim.set_xlim(0, num_tasks - 1)
-            ax_anim.set_ylim(0, 1)
-            ax_anim.set_xlabel("Task Index", fontsize=12, fontfamily='Arial', color='#1a2a44')
-            ax_anim.set_ylabel("Completion (0–1)", fontsize=12, fontfamily='Arial', color='#1a2a44')
-            ax_anim.set_title("Completion Ripple Animation", fontsize=14, fontfamily='Arial', pad=10, color='#f28c38')
-            ax_anim.grid(True, linestyle="--", alpha=0.7, color='#2a4066')
-            ax_anim.set_facecolor('#fff')
-            ax_anim.tick_params(colors='#1a2a44')
+        # Animation Controls (Slider-based)
+        st.write("### Completion Ripple Animation")
+        frame = st.slider("Select Frame", 0, steps-1, 0, step=max(1, int(steps / 100)))
+        fig_anim, ax_anim = plt.subplots(figsize=(6,4), facecolor='#fff')
+        line, = ax_anim.plot([], [], 'o-', color='#f28c38', lw=2, marker='o', markersize=10, markeredgecolor='#1a2a44', markeredgewidth=2)
+        ripple_marker, = ax_anim.plot([], [], 'o', color='#d8701f', markersize=15, alpha=0.7)
+        ax_anim.set_xlim(0, num_tasks - 1)
+        ax_anim.set_ylim(0, 1)
+        ax_anim.set_xlabel("Task Index", fontsize=12, fontfamily='Arial', color='#1a2a44')
+        ax_anim.set_ylabel("Completion (0–1)", fontsize=12, fontfamily='Arial', color='#1a2a44')
+        ax_anim.set_title("Completion Ripple Animation", fontsize=14, fontfamily='Arial', pad=10, color='#f28c38')
+        ax_anim.grid(True, linestyle="--", alpha=0.7, color='#2a4066')
+        ax_anim.set_facecolor('#fff')
+        ax_anim.tick_params(colors='#1a2a44')
 
-            for frame in range(0, steps, max(1, int(steps / 100))):
-                line.set_data(range(num_tasks), u_matrix[:, frame])
-                # Fix for ripple_marker: Use set_xdata and set_ydata for single point
-                max_completion_idx = np.argmax(u_matrix[:, frame])
-                ripple_marker.set_xdata([max_completion_idx])  # Sequence for x
-                ripple_marker.set_ydata([u_matrix[max_completion_idx, frame]])  # Sequence for y
-                placeholder.pyplot(fig_anim, use_container_width=True)
-                if use_delay:
-                    time.sleep(0.5)  # Controlled delay
-                else:
-                    time.sleep(0.01)  # Minimal delay for smooth playback
-                plt.close(fig_anim)  # Close to avoid memory buildup
-            placeholder.empty()  # Clear after animation
+        line.set_data(range(num_tasks), u_matrix[:, frame])
+        max_completion_idx = np.argmax(u_matrix[:, frame])
+        ripple_marker.set_xdata([max_completion_idx])
+        ripple_marker.set_ydata([u_matrix[max_completion_idx, frame]])
+        st.pyplot(fig_anim, use_container_width=True)
