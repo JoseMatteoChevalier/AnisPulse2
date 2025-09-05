@@ -80,34 +80,42 @@ def export_mpp(task_df, start_times, finish_times):
     return mpp_df.to_csv(index=False)
 
 # ----------------------------
-# PDE Simulation Function
+# PDE Simulation Function with Reaction-Diffusion
 # ----------------------------
-def run_pde(adjacency, durations, diffusion, risk_levels, T=140, dt=0.01):
+def reaction(u_i, duration):
+    return 1.0 / duration if duration > 0 else 0
+
+def run_pde(adjacency, durations, diffusion, risk_levels, start_times, T=140, dt=0.01):
     num_tasks = len(durations)
-    steps = int(T/dt) + 1
-    u = np.zeros((num_tasks, steps))
-    for t in range(steps-1):
+    steps = int(T/dt)
+    u = np.zeros((num_tasks, steps+1))
+    durations_risk = durations * np.maximum(1.0, risk_levels)
+    for t in range(steps):
         du = np.zeros(num_tasks)
         for i in range(num_tasks):
             preds = np.where(adjacency[:,i] > 0)[0]
-            if len(preds) == 0 or all(u[p,t] >= 1.0 - 1e-6 for p in preds):
-                dur = durations[i] * max(1.0, risk_levels[i])
-                if dur > 0:
-                    du[i] += 1.0 / dur
-                for j in preds:
-                    if u[j,t] >= 1.0 - 1e-6:
-                        du[i] += adjacency[j,i] * (u[j,t] - u[i,t]) * diffusion
-        u[:,t+1] = np.clip(u[:,t] + du * dt, 0, 1)
+            elapsed_time = t * dt - start_times[i]
+            if elapsed_time < 0:
+                continue  # Task hasn't started yet
+            if len(preds) == 0 or all(u[p,t] >= 1.0 for p in preds):  # Start only when predecessors are complete
+                max_progress = min(1.0, elapsed_time / durations_risk[i]) if elapsed_time <= durations_risk[i] else 1.0
+                if u[i,t] < max_progress:
+                    du[i] += reaction(u[i,t], durations_risk[i])
+                # Apply diffusion as a delay factor only after duration is met
+                if elapsed_time >= durations_risk[i]:
+                    delay_factor = diffusion * sum(adjacency[j,i] * (1.0 - u[i,t]) for j in range(num_tasks) if adjacency[j,i] > 0)
+                    du[i] -= delay_factor  # Negative to slow down completion
+            u[:,t+1] = np.clip(u[:,t] + du * dt, 0, max_progress)
     return u
 
 # ----------------------------
 # Classical Completion Function
 # ----------------------------
-def compute_classical_completion(start_times, finish_times, durations, time):
+def compute_classical_completion(start_times, finish_times, durations, simulation_time):
     num_tasks = len(durations)
-    u = np.zeros((num_tasks, len(time)))
+    u = np.zeros((num_tasks, len(simulation_time)))
     for i in range(num_tasks):
-        for j, t in enumerate(time):
+        for j, t in enumerate(simulation_time):
             if t < start_times[i]:
                 u[i, j] = 0
             elif t < finish_times[i]:
@@ -163,9 +171,9 @@ default_adjacency = np.array([
 ], dtype=float)
 default_deps = ["", "1", "2", "3", "2", "4,5"]
 
-T = 140
+# Dynamically set T based on classical completion
 dt = 0.01
-time = np.linspace(0, T, int(T/dt)+1)
+T = 150  # Initial guess, will be updated dynamically
 
 # Initialize session state
 if "simulation_data" not in st.session_state:
@@ -180,16 +188,32 @@ if "task_df" not in st.session_state:
         "Dependencies (IDs)": default_deps,
         "Risk (0-5)": default_risks
     })
+if "diffusion" not in st.session_state:
+    st.session_state.diffusion = 0.001
 
 # Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📝 Editor & Results", "🔗 Task Dependencies", "🔮 Eigenvalue Analysis", "🌊 Risk Visualization"])
+tab1, tab2, tab3 = st.tabs(["📝 Editor & Results", "🔗 Task Dependencies", "🔮 Eigenvalue Analysis"])
 
 with tab1:
     # Sidebar
     with st.sidebar.expander("⚙️ Simulation Parameters", expanded=True):
         st.subheader("Simulation Parameters")
-        diffusion = st.slider("Diffusion Coefficient", 0.001, 0.01, 0.001, 0.001)
-        st.write("**Diffusion Factor**: Controls task influence (0.001–0.01), affecting the smoothness of the PDE approximation.")
+        diffusion = st.slider("Diffusion Coefficient", 0.001, 0.05, st.session_state.diffusion, 0.001, help="Finely tune delay propagation (0.001–0.05). Higher values increase delay from risk points.")
+        col_diff1, col_diff2, col_diff3 = st.columns(3)
+        with col_diff1:
+            if st.button("Low (0.01)"):
+                st.session_state.diffusion = 0.01
+                st.rerun()
+        with col_diff2:
+            if st.button("Medium (0.025)"):
+                st.session_state.diffusion = 0.025
+                st.rerun()
+        with col_diff3:
+            if st.button("High (0.05)"):
+                st.session_state.diffusion = 0.05
+                st.rerun()
+        diffusion = st.session_state.diffusion
+        st.write("**Diffusion Factor**: Controls delay propagation from risk points (0.001–0.05), decreasing completion rate.")
         st.write("**Risk**: Values (0–5) directly multiply task durations (e.g., risk=2 means duration * 2).")
 
     # Project Editor
@@ -292,32 +316,41 @@ with tab1:
             st.session_state.simulation_data["adjacency"] = adjacency
             st.write("Debug: Adjacency Matrix:", adjacency)  # Debug output
 
-            # Diffusion-based Simulation
-            u_risk = run_pde(adjacency, durations, diffusion, risks)
-            risk_curve = u_risk.mean(axis=0)
-            st.session_state.simulation_data["u_matrix"] = u_risk
-            progress_bar.progress(50)
-
-            # Classical Schedule
+            # Dynamically set T based on classical completion
             start_times_risk = np.zeros(num_tasks)
             finish_times_risk = np.zeros(num_tasks)
-            durations_risk = durations * np.maximum(1, risks)
+            durations_risk = durations * np.maximum(1.0, risks)
             for i in range(num_tasks):
                 preds = np.where(adjacency[:, i] > 0)[0]
                 if len(preds) > 0:
                     start_times_risk[i] = max(finish_times_risk[p] for p in preds)
                 finish_times_risk[i] = start_times_risk[i] + durations_risk[i]
-            classical_risk = compute_classical_completion(start_times_risk, finish_times_risk, durations_risk, time)
+            T = int(np.max(finish_times_risk) + 10)  # Extend by 10 days beyond max finish time
+            simulation_time = np.linspace(0, T, int(T/dt)+1)
+
+            # Diffusion-based Simulation
+            u_risk = run_pde(adjacency, durations, diffusion, risks, start_times_risk, T, dt)
+            risk_curve = u_risk.mean(axis=0)
+            st.session_state.simulation_data["u_matrix"] = u_risk
+            progress_bar.progress(50)
+
+            # Classical Schedule
+            classical_risk = compute_classical_completion(start_times_risk, finish_times_risk, durations_risk, simulation_time)
             progress_bar.progress(100)
 
+            # Calculate Time to Completion
+            classical_completion_time = simulation_time[np.argmax(classical_risk >= 0.99)] if np.max(classical_risk) >= 0.99 else T
+            pde_completion_time = simulation_time[np.argmax(risk_curve >= 0.99)] if np.max(risk_curve) >= 0.99 else T
+
             st.subheader("Simulation Results")
-            st.write("The plot shows risk-influenced schedules: diffusion-based (PDE, red, slightly smoother) and classical (blue, linear). Risk multiplies task durations. Adjust the diffusion coefficient to see its effect.")
+            st.write(f"**Time to Completion:** Classical: {classical_completion_time:.1f} days, PDE: {pde_completion_time:.1f} days")
+            st.write("The plot shows risk-influenced schedules: diffusion-based (PDE, red, delayed with risk) and classical (blue, linear). Increase diffusion to see delay propagation from risk points.")
 
             col1, col2 = st.columns([1, 1])
             with col1.container():
                 fig, ax = plt.subplots(figsize=(6,4), facecolor='#fff')
-                ax.plot(time, risk_curve, color="#d32f2f", lw=2, label="Diffusion Risk")
-                ax.plot(time, classical_risk, color="#1976d2", lw=2, label="Classical Risk")
+                ax.plot(simulation_time, risk_curve, color="#d32f2f", lw=2, label="Diffusion Risk")
+                ax.plot(simulation_time, classical_risk, color="#1976d2", lw=2, label="Classical Risk")
                 ax.set_xlabel("Time (days)", fontsize=12, fontfamily='Arial', color='#1a2a44')
                 ax.set_ylabel("Average Completion (0–1)", fontsize=12, fontfamily='Arial', color='#1a2a44')
                 ax.set_title("Completion: Diffusion vs Classical (Risk)", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
@@ -329,15 +362,16 @@ with tab1:
 
             with col2.container():
                 st.markdown('<div class="right-column">', unsafe_allow_html=True)
-                fig_gantt, axg = plt.subplots(figsize=(6,4), facecolor='#fff')
+                # Classical Gantt Chart
+                fig_gantt_classical, axg_classical = plt.subplots(figsize=(6,4), facecolor='#fff')
                 start_times = start_times_risk
                 finish_times = finish_times_risk
                 durations_gantt = durations_risk
                 colors = plt.cm.Oranges(task_df["Risk (0-5)"].to_numpy() / 5.0)
                 for i in range(num_tasks):
-                    bar = axg.barh(i, durations_gantt[i], left=start_times[i], height=0.4,
+                    bar = axg_classical.barh(i, durations_gantt[i], left=start_times[i], height=0.4,
                                    align="center", color=colors[i], edgecolor="#1a2a44", alpha=0.9)
-                    axg.text(start_times[i] + durations_gantt[i]/2, i,
+                    axg_classical.text(start_times[i] + durations_gantt[i]/2, i,
                              f"{tasks[i]} ({durations_gantt[i]:.0f}d)",
                              ha="center", va="center", fontsize=8, fontfamily='Arial', color='#1a2a44')
                     mplcursors.cursor(bar, hover=True).connect("add", lambda sel: sel.annotation.set_text(
@@ -346,26 +380,63 @@ with tab1:
                 for i in range(num_tasks):
                     preds = np.where(adjacency[:,i] > 0)[0]
                     for p in preds:
-                        axg.annotate("", xy=(start_times[i], i), xytext=(finish_times[p], p),
+                        axg_classical.annotate("", xy=(start_times[i], i), xytext=(finish_times[p], p),
                                      arrowprops=dict(arrowstyle="->", color="#1a2a44", lw=1.5))
-                axg.set_yticks(range(num_tasks))
-                axg.set_yticklabels([f"{i+1}" for i in range(num_tasks)], fontsize=10, fontfamily='Arial')
-                axg.invert_yaxis()
-                axg.set_xlabel("Time (days)", fontsize=12, fontfamily='Arial')
-                axg.set_ylabel("Task ID", fontsize=12, fontfamily='Arial')
-                axg.set_title("Gantt Chart (Risk)", fontsize=14, fontfamily='Arial', pad=10)
-                axg.grid(True, axis="x", linestyle="--", alpha=0.7, color='#2a4066')
-                axg.set_facecolor('#fff')
-                st.pyplot(fig_gantt, use_container_width=True)
+                axg_classical.set_yticks(range(num_tasks))
+                axg_classical.set_yticklabels([f"{i+1}" for i in range(num_tasks)], fontsize=10, fontfamily='Arial')
+                axg_classical.invert_yaxis()
+                axg_classical.set_xlabel("Time (days)", fontsize=12, fontfamily='Arial')
+                axg_classical.set_ylabel("Task ID", fontsize=12, fontfamily='Arial')
+                axg_classical.set_title("Gantt Chart (Classical)", fontsize=14, fontfamily='Arial', pad=10)
+                axg_classical.grid(True, axis="x", linestyle="--", alpha=0.7, color='#2a4066')
+                axg_classical.set_facecolor('#fff')
+                st.pyplot(fig_gantt_classical, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
+
+            # PDE Gantt Chart
+            st.markdown('<div class="right-column">', unsafe_allow_html=True)
+            fig_gantt_pde, axg_pde = plt.subplots(figsize=(6,4), facecolor='#fff')
+            start_times_pde = np.zeros(num_tasks)
+            finish_times_pde = np.zeros(num_tasks)
+            for i in range(num_tasks):
+                preds = np.where(adjacency[:,i] > 0)[0]
+                if len(preds) > 0:
+                    start_times_pde[i] = max(finish_times_pde[p] for p in preds)
+                else:
+                    start_times_pde[i] = 0
+                finish_times_pde[i] = start_times_pde[i] + durations_risk[i]
+                duration_pde = durations_risk[i]
+                bar = axg_pde.barh(i, duration_pde, left=start_times_pde[i], height=0.4,
+                                 align="center", color=colors[i], edgecolor="#1a2a44", alpha=0.9)
+                axg_pde.text(start_times_pde[i] + duration_pde/2, i,
+                           f"{tasks[i]} ({duration_pde:.0f}d)",
+                           ha="center", va="center", fontsize=8, fontfamily='Arial', color='#1a2a44')
+                mplcursors.cursor(bar, hover=True).connect("add", lambda sel: sel.annotation.set_text(
+                    f"Task: {tasks[sel.index]}\nDuration: {duration_pde:.1f} days\nRisk: {task_df['Risk (0-5)'][sel.index]:.1f}"
+                ).set_alpha(0.0).set_alpha(1.0, duration=0.5))  # Pulsing tooltip
+            for i in range(num_tasks):
+                preds = np.where(adjacency[:,i] > 0)[0]
+                for p in preds:
+                    axg_pde.annotate("", xy=(start_times_pde[i], i), xytext=(finish_times_pde[p], p),
+                                   arrowprops=dict(arrowstyle="->", color="#1a2a44", lw=1.5))
+            axg_pde.set_yticks(range(num_tasks))
+            axg_pde.set_yticklabels([f"{i+1}" for i in range(num_tasks)], fontsize=10, fontfamily='Arial')
+            axg_pde.invert_yaxis()
+            axg_pde.set_xlabel("Time (days)", fontsize=12, fontfamily='Arial')
+            axg_pde.set_ylabel("Task ID", fontsize=12, fontfamily='Arial')
+            axg_pde.set_title("Gantt Chart (PDE)", fontsize=14, fontfamily='Arial', pad=10)
+            axg_pde.grid(True, axis="x", linestyle="--", alpha=0.7, color='#2a4066')
+            axg_pde.set_facecolor('#fff')
+            st.pyplot(fig_gantt_pde, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
             # 3D Completion Plot
             st.subheader("3D Completion Plot")
             st.write("3D view of risk-influenced schedules: PDE (red) and classical (blue).")
             fig_3d = plt.figure(figsize=(8,6), facecolor='#fff')
             ax_3d = fig_3d.add_subplot(111, projection='3d')
-            ax_3d.plot(time, [0]*len(time), risk_curve, color="#d32f2f", lw=2, label="Diffusion Risk")
-            ax_3d.plot(time, [1]*len(time), classical_risk, color="#1976d2", lw=2, label="Classical Risk")
+            ax_3d.plot(simulation_time, [0]*len(simulation_time), risk_curve, color="#d32f2f", lw=2, label="Diffusion Risk")
+            ax_3d.plot(simulation_time, [1]*len(simulation_time), classical_risk, color="#1976d2", lw=2, label="Classical Risk")
             ax_3d.set_xlabel("Time (days)", fontsize=12, fontfamily='Arial', color='#1a2a44')
             ax_3d.set_ylabel("Model (0=PDE, 1=Classical)", fontsize=12, fontfamily='Arial', color='#1a2a44')
             ax_3d.set_zlabel("Average Completion (0–1)", fontsize=12, fontfamily='Arial', color='#1a2a44')
@@ -383,8 +454,8 @@ with tab1:
                 st.download_button("📄 Download Task Data (CSV)", csv, "project_tasks.csv", "text/csv")
             with col_export2:
                 buf = BytesIO()
-                fig_gantt.savefig(buf, format="png", bbox_inches="tight")
-                st.download_button("🖼️ Download Gantt Chart (PNG)", buf.getvalue(), "gantt_chart.png", "image/png")
+                fig_gantt_pde.savefig(buf, format="png", bbox_inches="tight")
+                st.download_button("🖼️ Download PDE Gantt Chart (PNG)", buf.getvalue(), "gantt_chart_pde.png", "image/png")
             with col_export3:
                 mpp_data = export_mpp(task_df, start_times_risk, finish_times_risk)
                 st.download_button("📤 Export as .mpp (CSV)", mpp_data, "project_tasks.mpp.csv", "text/csv")
@@ -392,7 +463,6 @@ with tab1:
             # Save Project
             if st.button("💾 Save Project"):
                 save_project(task_df, u_matrix, risk_curve, classical_risk)
-                st.success("Project saved to 'project_data.json'.")
 
 with tab2:
     # Task Dependency Diagram
@@ -462,90 +532,3 @@ with tab3:
         ax_heat.set_ylabel("Task ID", fontsize=12, fontfamily='Arial', color='#1a2a44')
         ax_heat.set_title("Adjacency Matrix Heatmap", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
         st.pyplot(fig_heat, use_container_width=True)
-
-with tab4:
-    # Risk Visualization
-    st.subheader("Risk Visualization")
-    if st.session_state.simulation_data["tasks"] is None or st.session_state.simulation_data["u_matrix"] is None:
-        st.info("Please run the simulation in the 'Editor & Results' tab to generate risk data.")
-    else:
-        tasks = st.session_state.simulation_data["tasks"]
-        u_matrix = st.session_state.simulation_data["u_matrix"]
-        num_tasks = st.session_state.simulation_data["num_tasks"]
-        task_df = st.session_state.task_df
-
-        st.write("### Risk Impact by Task (Animated Bar Chart)")
-        st.write("Bar heights reflect risk levels (0–5) and their impact on task durations, styled like MS Project. View side-by-side animations with different delays.")
-        risks = task_df["Risk (0-5)"].to_numpy()
-        durations = task_df["Duration (days)"].to_numpy()
-        risk_impact = durations * np.maximum(1, risks) - durations  # Target heights
-        frames = 50  # Number of animation frames
-        height_progress = np.linspace(0, 1, frames)[:, np.newaxis] * risk_impact[np.newaxis, :]
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write("**Fast Animation (0.01s Delay)**")
-            if st.button("▶️ Play Fast Animation"):
-                placeholder_fast = st.empty()
-                fig_fast, ax_fast = plt.subplots(figsize=(6,4), facecolor='#fff')
-                bars_fast = ax_fast.bar(range(num_tasks), np.zeros(num_tasks), color='#f28c38', edgecolor='#1a2a44', alpha=0.9)
-                ax_fast.set_xticks(range(num_tasks))
-                ax_fast.set_xticklabels([f"Task {i+1}" for i in range(num_tasks)], rotation=45, fontsize=10, fontfamily='Arial')
-                ax_fast.set_xlabel("Task ID", fontsize=12, fontfamily='Arial', color='#1a2a44')
-                ax_fast.set_ylabel("Risk Impact (Additional Days)", fontsize=12, fontfamily='Arial', color='#1a2a44')
-                ax_fast.set_title("Risk Impact (Fast)", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
-                ax_fast.grid(True, axis="y", linestyle="--", alpha=0.7, color='#2a4066')
-                ax_fast.set_facecolor('#fff')
-                ax_fast.tick_params(colors='#1a2a44')
-                start_time = time.time()
-                for frame in range(frames):
-                    for bar, height in zip(bars_fast, height_progress[frame]):
-                        bar.set_height(height)
-                    placeholder_fast.pyplot(fig_fast, use_container_width=True)
-                    while time.time() - start_time < frame * 0.01 / frames:
-                        pass  # Busy wait for 0.01s equivalent
-                placeholder_fast.empty()
-
-        with col2:
-            st.write("**Slow Animation (0.5s Delay)**")
-            if st.button("▶️ Play Slow Animation"):
-                placeholder_slow = st.empty()
-                fig_slow, ax_slow = plt.subplots(figsize=(6,4), facecolor='#fff')
-                bars_slow = ax_slow.bar(range(num_tasks), np.zeros(num_tasks), color='#f28c38', edgecolor='#1a2a44', alpha=0.9)
-                ax_slow.set_xticks(range(num_tasks))
-                ax_slow.set_xticklabels([f"Task {i+1}" for i in range(num_tasks)], rotation=45, fontsize=10, fontfamily='Arial')
-                ax_slow.set_xlabel("Task ID", fontsize=12, fontfamily='Arial', color='#1a2a44')
-                ax_slow.set_ylabel("Risk Impact (Additional Days)", fontsize=12, fontfamily='Arial', color='#1a2a44')
-                ax_slow.set_title("Risk Impact (Slow)", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
-                ax_slow.grid(True, axis="y", linestyle="--", alpha=0.7, color='#2a4066')
-                ax_slow.set_facecolor('#fff')
-                ax_slow.tick_params(colors='#1a2a44')
-                start_time = time.time()
-                for frame in range(frames):
-                    for bar, height in zip(bars_slow, height_progress[frame]):
-                        bar.set_height(height)
-                    placeholder_slow.pyplot(fig_slow, use_container_width=True)
-                    while time.time() - start_time < frame * 0.5 / frames:
-                        pass  # Busy wait for 0.5s equivalent
-                placeholder_slow.empty()
-
-        # Static version for reference
-        st.write("### Static Risk Impact")
-        fig_static, ax_static = plt.subplots(figsize=(6,4), facecolor='#fff')
-        bars_static = ax_static.bar(range(num_tasks), risk_impact, color='#f28c38', edgecolor='#1a2a44', alpha=0.9)
-        ax_static.set_xticks(range(num_tasks))
-        ax_static.set_xticklabels([f"Task {i+1}" for i in range(num_tasks)], rotation=45, fontsize=10, fontfamily='Arial')
-        ax_static.set_xlabel("Task ID", fontsize=12, fontfamily='Arial', color='#1a2a44')
-        ax_static.set_ylabel("Risk Impact (Additional Days)", fontsize=12, fontfamily='Arial', color='#1a2a44')
-        ax_static.set_title("Risk Impact (Static)", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
-        ax_static.grid(True, axis="y", linestyle="--", alpha=0.7, color='#2a4066')
-        ax_static.set_facecolor('#fff')
-        ax_static.tick_params(colors='#1a2a44')
-        for bar, risk in zip(bars_static, risks):
-            height = bar.get_height()
-            ax_static.text(bar.get_x() + bar.get_width()/2, height,
-                           f"{risk:.1f}", ha="center", va="bottom", fontsize=8, color='#1a2a44')
-            mplcursors.cursor(bar, hover=True).connect("add", lambda sel: sel.annotation.set_text(
-                f"Task: {tasks[sel.index]}\nDuration: {durations[sel.index]:.1f} days\nRisk: {risks[sel.index]:.1f}"
-            ).set_alpha(0.0).set_alpha(1.0, duration=0.5))  # Pulsing tooltip
-        st.pyplot(fig_static, use_container_width=True)
