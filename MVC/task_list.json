@@ -1,0 +1,72 @@
+[
+  {
+    "id": 1,
+    "name": "Market Research",
+    "duration": 10.0,
+    "dependencies": [],
+    "risk_level": 1.0,
+    "parent_id": null
+  },
+  {
+    "id": 2,
+    "name": "Strategy Development",
+    "duration": 7.0,
+    "dependencies": [
+      1
+    ],
+    "risk_level": 0.5,
+    "parent_id": null
+  },
+  {
+    "id": 3,
+    "name": "Creative Design",
+    "duration": 14.0,
+    "dependencies": [
+      2
+    ],
+    "risk_level": 2.0,
+    "parent_id": null
+  },
+  {
+    "id": 4,
+    "name": "Content Creation",
+    "duration": 12.0,
+    "dependencies": [
+      2
+    ],
+    "risk_level": 1.5,
+    "parent_id": null
+  },
+  {
+    "id": 5,
+    "name": "Media Planning",
+    "duration": 5.0,
+    "dependencies": [
+      2
+    ],
+    "risk_level": 1.0,
+    "parent_id": null
+  },
+  {
+    "id": 6,
+    "name": "Campaign Launch",
+    "duration": 3.0,
+    "dependencies": [
+      3,
+      4,
+      5
+    ],
+    "risk_level": 3.0,
+    "parent_id": null
+  },
+  {
+    "id": 7,
+    "name": "Performance Analysis",
+    "duration": 7.0,
+    "dependencies": [
+      6
+    ],
+    "risk_level": 0.5,
+    "parent_id": null
+  }
+]

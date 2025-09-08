@@ -1,0 +1,19 @@
+# macOS system files
+.DS_Store
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+# IDE/project-specific files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+
+# JSON files that are purely local / generated (if any)
+*.json~       # backup JSON files

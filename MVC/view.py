@@ -1,0 +1,834 @@
+import streamlit as st
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import mplcursors
+import networkx as nx
+import seaborn as sns
+import numpy as np
+import pandas as pd
+import matplotlib.patches as patches
+
+
+# -------------------------------
+# Sidebar
+# -------------------------------
+def render_sidebar(model):
+    with st.sidebar.expander("⚙️ Simulation Parameters", expanded=True):
+        st.subheader("Simulation Parameters")
+        diffusion = st.slider("Diffusion Coefficient", 0.001, 0.05,
+                              st.session_state.get("diffusion", 0.001), 0.001,
+                              help="Finely tune delay propagation (0.001–0.05).")
+        reaction_multiplier = st.slider("Reaction Multiplier", 1.0, 5.0,
+                                        st.session_state.get("reaction_multiplier", 2.0), 0.1,
+                                        help="Scales the base reaction rate (1.0–5.0).")
+        max_delay = st.slider("Max Delay", 0.01, 0.1,
+                              st.session_state.get("max_delay", 0.05), 0.01,
+                              help="Max delay from predecessors (0.01–0.1).")
+        col_diff1, col_diff2, col_diff3 = st.columns(3)
+        with col_diff1:
+            st.button("Low (0.01)", key="diff_low")
+        with col_diff2:
+            st.button("Medium (0.025)", key="diff_medium")
+        with col_diff3:
+            st.button("High (0.05)", key="diff_high")
+        st.write("**Diffusion Factor**: Controls delay propagation from risk points.")
+        st.write("**Reaction Multiplier**: Scales the base progress rate.")
+        st.write("**Max Delay**: Caps delay from predecessors.")
+        st.write("**Risk**: Values (0–5) multiply task durations.")
+        return diffusion, reaction_multiplier, max_delay
+
+
+# -------------------------------
+# Editor Tab
+# -------------------------------
+def render_editor_tab(model):
+    st.subheader("Project Editor")
+    st.info("Edit tasks or import an .mpp file. Use **Task IDs** in Dependencies (e.g., `1,2`).")
+    mpp_file = st.file_uploader("Upload Microsoft Project (.mpp) file", type=["mpp"])
+    task_df = st.data_editor(
+        model.task_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Select": st.column_config.CheckboxColumn("Select", help="Select rows to delete"),
+            "ID": st.column_config.NumberColumn(disabled=True),
+            "Task": st.column_config.TextColumn(required=True),
+            "Duration (days)": st.column_config.NumberColumn(min_value=1.0, step=1.0),
+            "Dependencies (IDs)": st.column_config.TextColumn(),
+            "Risk (0-5)": st.column_config.NumberColumn(min_value=0, max_value=5, step=0.1)
+        }
+    )
+    col_add, col_delete = st.columns(2)
+    with col_add:
+        st.button("➕ Add New Row", key="add_row")
+    with col_delete:
+        st.button("🗑️ Delete Selected Rows", key="delete_rows")
+    st.button("🔄 Recalculate Simulation", type="primary", key="recalculate")
+    return task_df, mpp_file
+
+
+# -------------------------------
+# Basic Schedule Tab (NEW)
+# -------------------------------
+# -------------------------------
+# Basic Schedule Tab (NEW)
+# -------------------------------
+# Add ONLY this section to your existing view.py file
+# Do NOT modify any other existing functions
+
+# -------------------------------
+# Basic Schedule Tab (ADDITION ONLY)
+# -------------------------------
+def render_basic_schedule_tab(model):
+    """
+    Naive baseline schedule - just dependencies and durations.
+    No risk, no PDE, no fancy calculations.
+    This is our sanity check baseline.
+    """
+    st.subheader("📅 Basic Schedule (Naive Baseline)")
+    st.info(
+        "Simple sequential scheduling based only on task durations and dependencies. This is our baseline sanity check.")
+
+    # Check if we have tasks
+    if len(model.task_df) == 0:
+        st.warning("No tasks defined. Please add tasks in the Editor tab.")
+        return
+
+    # Calculate basic schedule
+    basic_schedule = calculate_basic_schedule(model.task_df)
+
+    if basic_schedule is None:
+        st.error("Cannot calculate schedule. Check for dependency errors.")
+        return
+
+    # Display summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Tasks", len(model.task_df))
+    with col2:
+        st.metric("Project Duration", f"{basic_schedule['project_duration']:.1f} days")
+    with col3:
+        st.metric("Critical Path Length", len(basic_schedule['critical_path']))
+    with col4:
+        st.metric("Total Work", f"{basic_schedule['total_work']:.1f} days")
+
+    # Show schedule table
+    st.subheader("📋 Task Schedule")
+    schedule_df = create_schedule_dataframe(model.task_df, basic_schedule)
+
+    # Make the table interactive and sortable
+    st.dataframe(
+        schedule_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Task ID": st.column_config.NumberColumn("ID", width="small"),
+            "Task Name": st.column_config.TextColumn("Task", width="large"),
+            "Duration": st.column_config.NumberColumn("Duration (days)", format="%.1f"),
+            "Start Day": st.column_config.NumberColumn("Start", format="%.1f"),
+            "Finish Day": st.column_config.NumberColumn("Finish", format="%.1f"),
+            "Dependencies": st.column_config.TextColumn("Deps", width="small"),
+            "Critical": st.column_config.CheckboxColumn("Critical Path"),
+            "Early Start": st.column_config.NumberColumn("Early Start", format="%.1f"),
+            "Late Start": st.column_config.NumberColumn("Late Start", format="%.1f"),
+            "Float": st.column_config.NumberColumn("Float (days)", format="%.1f"),
+        }
+    )
+
+    # Basic Gantt Chart
+    st.subheader("📊 Basic Gantt Chart")
+    render_basic_gantt_chart(basic_schedule, model.task_df)
+
+    # Critical Path Analysis
+    st.subheader("🔍 Critical Path Analysis")
+    render_critical_path_info(basic_schedule)
+
+
+def calculate_basic_schedule(task_df):
+    """Calculate the most basic schedule possible"""
+    try:
+        num_tasks = len(task_df)
+        early_start = np.zeros(num_tasks)
+        early_finish = np.zeros(num_tasks)
+        late_start = np.zeros(num_tasks)
+        late_finish = np.zeros(num_tasks)
+
+        dependency_matrix = build_dependency_matrix(task_df)
+        task_order = topological_sort(task_df, dependency_matrix)
+        if task_order is None:
+            return None
+
+        for task_idx in task_order:
+            predecessors = np.where(dependency_matrix[:, task_idx] == 1)[0]
+            if len(predecessors) > 0:
+                early_start[task_idx] = np.max(early_finish[predecessors])
+            else:
+                early_start[task_idx] = 0
+            duration = task_df.iloc[task_idx]["Duration (days)"]
+            early_finish[task_idx] = early_start[task_idx] + duration
+
+        project_duration = np.max(early_finish)
+
+        for i in range(num_tasks):
+            successors = np.where(dependency_matrix[i, :] == 1)[0]
+            if len(successors) == 0:
+                late_finish[i] = project_duration
+            else:
+                late_finish[i] = project_duration
+
+        for task_idx in reversed(task_order):
+            successors = np.where(dependency_matrix[task_idx, :] == 1)[0]
+            if len(successors) > 0:
+                late_finish[task_idx] = np.min(late_start[successors])
+            duration = task_df.iloc[task_idx]["Duration (days)"]
+            late_start[task_idx] = late_finish[task_idx] - duration
+
+        total_float = late_start - early_start
+        critical_tasks = np.where(np.abs(total_float) < 0.001)[0]
+        critical_path = find_critical_path(critical_tasks, dependency_matrix, task_order)
+
+        return {
+            'early_start': early_start,
+            'early_finish': early_finish,
+            'late_start': late_start,
+            'late_finish': late_finish,
+            'total_float': total_float,
+            'critical_path': critical_path,
+            'project_duration': project_duration,
+            'total_work': np.sum(task_df["Duration (days)"]),
+            'task_order': task_order
+        }
+    except Exception as e:
+        st.error(f"Error calculating basic schedule: {str(e)}")
+        return None
+
+
+def build_dependency_matrix(task_df):
+    """Build adjacency matrix from dependencies"""
+    num_tasks = len(task_df)
+    matrix = np.zeros((num_tasks, num_tasks))
+    for i, row in task_df.iterrows():
+        deps = str(row['Dependencies (IDs)']).strip()
+        if deps and deps != "":
+            dep_list = [d.strip() for d in deps.split(",")]
+            for dep in dep_list:
+                if dep.isdigit():
+                    dep_id = int(dep)
+                    if 1 <= dep_id <= num_tasks:
+                        matrix[dep_id - 1, i] = 1
+    return matrix
+
+
+def topological_sort(task_df, dependency_matrix):
+    """Topological sort using Kahn's algorithm"""
+    num_tasks = len(task_df)
+    in_degree = np.sum(dependency_matrix, axis=0)
+    queue = [i for i in range(num_tasks) if in_degree[i] == 0]
+    result = []
+
+    while queue:
+        current = queue.pop(0)
+        result.append(current)
+        successors = np.where(dependency_matrix[current, :] == 1)[0]
+        for successor in successors:
+            in_degree[successor] -= 1
+            if in_degree[successor] == 0:
+                queue.append(successor)
+
+    if len(result) != num_tasks:
+        return None
+    return result
+
+
+def find_critical_path(critical_tasks, dependency_matrix, task_order):
+    """Find the actual critical path sequence"""
+    if len(critical_tasks) == 0:
+        return []
+
+    critical_set = set(critical_tasks)
+    path = []
+    start_candidates = []
+    for task in critical_tasks:
+        predecessors = np.where(dependency_matrix[:, task] == 1)[0]
+        critical_predecessors = [p for p in predecessors if p in critical_set]
+        if len(critical_predecessors) == 0:
+            start_candidates.append(task)
+
+    if start_candidates:
+        current = start_candidates[0]
+        path.append(current)
+        while True:
+            successors = np.where(dependency_matrix[current, :] == 1)[0]
+            critical_successors = [s for s in successors if s in critical_set]
+            if critical_successors:
+                current = critical_successors[0]
+                path.append(current)
+            else:
+                break
+    return path
+
+
+def create_schedule_dataframe(task_df, basic_schedule):
+    """Create a comprehensive schedule dataframe"""
+    schedule_data = []
+    for i, row in task_df.iterrows():
+        schedule_data.append({
+            "Task ID": row["ID"],
+            "Task Name": row["Task"],
+            "Duration": row["Duration (days)"],
+            "Start Day": basic_schedule['early_start'][i],
+            "Finish Day": basic_schedule['early_finish'][i],
+            "Dependencies": row["Dependencies (IDs)"],
+            "Critical": i in basic_schedule['critical_path'],
+            "Early Start": basic_schedule['early_start'][i],
+            "Late Start": basic_schedule['late_start'][i],
+            "Float": basic_schedule['total_float'][i],
+        })
+    return pd.DataFrame(schedule_data)
+
+
+def render_basic_gantt_chart(basic_schedule, task_df):
+    """Render a simple Gantt chart for the basic schedule"""
+    num_tasks = len(task_df)
+    fig, ax = plt.subplots(figsize=(12, max(6, num_tasks * 0.4)))
+
+    normal_color = '#4CAF50'  # Green
+    critical_color = '#F44336'  # Red
+
+    for i in range(num_tasks):
+        start = basic_schedule['early_start'][i]
+        duration = task_df.iloc[i]["Duration (days)"]
+        is_critical = i in basic_schedule['critical_path']
+        color = critical_color if is_critical else normal_color
+
+        rect = patches.Rectangle(
+            (start, i - 0.3), duration, 0.6,
+            linewidth=1, edgecolor='black', facecolor=color, alpha=0.7
+        )
+        ax.add_patch(rect)
+
+        task_name = task_df.iloc[i]["Task"]
+        ax.text(start + duration / 2, i, f"{task_name}\n({duration:.1f}d)",
+                ha='center', va='center', fontsize=8, fontweight='bold')
+
+        if not is_critical and basic_schedule['total_float'][i] > 0:
+            float_rect = patches.Rectangle(
+                (start + duration, i - 0.15), basic_schedule['total_float'][i], 0.3,
+                linewidth=1, edgecolor='gray', facecolor='lightgray', alpha=0.5
+            )
+            ax.add_patch(float_rect)
+
+    ax.set_xlim(0, basic_schedule['project_duration'] * 1.1)
+    ax.set_ylim(-0.5, num_tasks - 0.5)
+    ax.set_xlabel('Time (Days)')
+    ax.set_ylabel('Tasks')
+    ax.set_title('Basic Schedule Gantt Chart\n(Green=Normal, Red=Critical Path)')
+    ax.set_yticks(range(num_tasks))
+    ax.set_yticklabels([f"Task {i + 1}" for i in range(num_tasks)])
+    ax.invert_yaxis()
+    ax.grid(True, axis='x', alpha=0.3)
+
+    normal_patch = patches.Patch(color=normal_color, alpha=0.7, label='Normal Tasks')
+    critical_patch = patches.Patch(color=critical_color, alpha=0.7, label='Critical Path')
+    float_patch = patches.Patch(color='lightgray', alpha=0.5, label='Float/Slack')
+    ax.legend(handles=[normal_patch, critical_patch, float_patch], loc='upper right')
+
+    plt.tight_layout()
+    st.pyplot(fig, use_container_width=True)
+
+
+def render_critical_path_info(basic_schedule):
+    """Display critical path information"""
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.write("**Critical Path Tasks:**")
+        if basic_schedule['critical_path']:
+            critical_info = []
+            for task_idx in basic_schedule['critical_path']:
+                task_id = task_idx + 1
+                critical_info.append(f"Task {task_id}")
+            st.write(" → ".join(critical_info))
+        else:
+            st.write("No critical path identified")
+
+    with col2:
+        st.write("**Key Metrics:**")
+        st.write(f"• Critical Path Length: {len(basic_schedule['critical_path'])} tasks")
+        st.write(f"• Project Duration: {basic_schedule['project_duration']:.1f} days")
+        total_float = np.sum(basic_schedule['total_float'])
+        st.write(f"• Total Float in Project: {total_float:.1f} days")
+
+    st.write("**Task Float Analysis:**")
+    float_df = pd.DataFrame({
+        'Task ID': range(1, len(basic_schedule['total_float']) + 1),
+        'Float (days)': basic_schedule['total_float'],
+        'Status': ['Critical' if f < 0.001 else f'Float: {f:.1f}d' for f in basic_schedule['total_float']]
+    })
+    st.dataframe(float_df, use_container_width=True, hide_index=True)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# -------------------------------
+# Simulation Results
+# -------------------------------
+# Replace your current render_simulation_results function in view.py with this ORIGINAL version
+
+def render_simulation_results(model):
+    if not model.simulation_data.get("tasks"):
+        st.info("Please run the simulation to view results.")
+        return
+
+    simulation_time = model.simulation_data.get("simulation_time", np.array([]))
+    risk_curve = model.simulation_data.get("risk_curve", np.array([]))
+    classical_risk = model.simulation_data.get("classical_risk", np.array([]))
+
+    # Safety check
+    if simulation_time is None or risk_curve is None or classical_risk is None:
+        st.info("Simulation data is incomplete. Cannot render results.")
+        return
+
+    # Make sure arrays match in length
+    min_len = min(len(simulation_time), len(risk_curve), len(classical_risk))
+    simulation_time = simulation_time[:min_len]
+    risk_curve = risk_curve[:min_len]
+    classical_risk = classical_risk[:min_len]
+
+    st.subheader("Simulation Results")
+    col1, col2 = st.columns(2)
+
+    # --- 2D Plot ---
+    with col1:
+        st.subheader("2D Completion Plot")
+        fig, ax = plt.subplots(figsize=(6, 4), facecolor='#fff')
+        # Blue Classical curve (SOLID)
+        ax.plot(simulation_time, classical_risk, color="#1976d2", lw=2, label="Classical Risk")
+        # Red PDE curve (DOTTED)
+        ax.plot(simulation_time, risk_curve, color="#d32f2f", lw=2, linestyle="--", label="Diffusion Risk")
+
+        ax.set_xlabel("Time (days)")
+        ax.set_ylabel("Average Completion (0–1)")
+        ax.set_title("Completion: Classical vs Diffusion")
+        ax.legend()
+        ax.grid(True)
+        st.pyplot(fig, use_container_width=True)
+
+    # --- 3D Plot ---
+    with col2:
+        st.subheader("3D Completion Plot")
+        fig_3d = plt.figure(figsize=(6, 4), facecolor='#fff')
+        ax_3d = fig_3d.add_subplot(111, projection='3d')
+        # Blue Classical (SOLID)
+        ax_3d.plot(simulation_time, [0] * len(simulation_time), classical_risk, color="#1976d2", lw=2,
+                   label="Classical Risk")
+        # Red PDE (DOTTED)
+        ax_3d.plot(simulation_time, [1] * len(simulation_time), risk_curve, color="#d32f2f", lw=2, linestyle='--',
+                   label="Diffusion Risk")
+        ax_3d.set_xlabel("Time (days)")
+        ax_3d.set_ylabel("Model (0=Classical,1=Diffusion)")
+        ax_3d.set_zlabel("Average Completion (0–1)")
+        ax_3d.set_title("3D Completion: Classical vs Diffusion")
+        ax_3d.legend()
+        st.pyplot(fig_3d, use_container_width=True)
+
+# -------------------------------
+# Dependency Tab
+# -------------------------------
+def render_dependency_tab(model):
+    if not model.simulation_data.get("tasks"):
+        st.info("Please run the simulation to view the dependency graph.")
+        return
+    tasks = model.simulation_data["tasks"]
+    adjacency = model.simulation_data["adjacency"]
+    st.subheader("Task Dependency Diagram")
+    st.write("Directed graph showing task dependencies.")
+    G = nx.DiGraph()
+    for i, task in enumerate(tasks):
+        G.add_node(i, label=f"{i + 1}: {task}")
+    for i in range(len(tasks)):
+        preds = np.where(adjacency[:, i] > 0)[0]
+        for p in preds:
+            G.add_edge(p, i)
+    fig_dep, ax_dep = plt.subplots(figsize=(6, 4), facecolor='#2a4066')
+    pos = nx.spring_layout(G)
+    nx.draw(G, pos, with_labels=True, labels=nx.get_node_attributes(G, 'label'),
+            node_color='#f28c38', node_size=800, font_size=9, font_family='Arial',
+            font_weight='bold', edge_color='#1a2a44', arrows=True, arrowsize=15)
+    ax_dep.set_title("Task Dependency Graph", fontsize=14, fontfamily='Arial', pad=10, color='#f28c38')
+    ax_dep.set_facecolor('#2a4066')
+    st.pyplot(fig_dep, use_container_width=True)
+
+
+# -------------------------------
+# Critical Path Helper
+# -------------------------------
+def compute_critical_path(adjacency, durations):
+    """
+    Compute critical path using adjacency matrix and task durations.
+    Returns: list of task indices on critical path, earliest start times array.
+    """
+    num_tasks = len(durations)
+    adj = np.array(adjacency)
+    in_degree = adj.sum(axis=0)
+    order = []
+    zero_in = [i for i in range(num_tasks) if in_degree[i] == 0]
+
+    # Topological sort
+    while zero_in:
+        n = zero_in.pop(0)
+        order.append(n)
+        for i in range(num_tasks):
+            if adj[n, i]:
+                in_degree[i] -= 1
+                if in_degree[i] == 0:
+                    zero_in.append(i)
+
+    earliest_start = np.zeros(num_tasks)
+    prev_task = [None] * num_tasks
+
+    for i in order:
+        preds = np.where(adj[:, i] > 0)[0]
+        if preds.size > 0:
+            est = earliest_start[preds] + durations[preds]
+            earliest_start[i] = est.max()
+            prev_task[i] = preds[est.argmax()]
+
+    # Backtrack to get critical path
+    end_task = (earliest_start + durations).argmax()
+    critical_path = []
+    t = end_task
+    while t is not None:
+        critical_path.insert(0, t)
+        t = prev_task[t]
+    return critical_path, earliest_start
+
+
+# -------------------------------
+# Helper functions
+# -------------------------------
+def update_parent_durations(task_df):
+    """
+    Update parent task durations as the sum of child durations if they exist.
+    """
+    durations = task_df['Duration'].copy()
+    for idx, row in task_df.iterrows():
+        if row['Level'] == 0:
+            # Children are all rows immediately below with Level 1
+            children = task_df[(task_df['Level'] == 1) & (task_df.index > idx)]
+            if not children.empty:
+                durations[idx] = children['Duration'].sum()
+    return durations
+
+
+# -------------------------------
+# Gantt Chart with Critical Path & Subtasks
+# -------------------------------
+def render_classical_gantt(model):
+    if not model.simulation_data.get("tasks"):
+        st.info("Run the simulation to view the Gantt chart.")
+        return
+
+    # Get the stored classical schedule data
+    start_times = model.simulation_data.get("start_times_classical")
+    finish_times = model.simulation_data.get("finish_times_classical")
+
+    if start_times is None or finish_times is None:
+        st.error("Classical schedule data not available. Run simulation first.")
+        return
+
+    task_df = model.task_df.copy()
+    tasks = task_df["Task"].tolist()
+    num_tasks = len(tasks)
+    durations_risk = task_df["Duration (days)"].values
+
+    classical_completion_time = np.max(finish_times)
+    pde_completion_time = np.max(model.simulation_data.get("finish_times_risk", finish_times))
+
+    st.subheader("Classical Gantt Chart")
+    st.write(
+        f"**Time to Completion:** Classical: {classical_completion_time:.1f} days, PDE: {pde_completion_time:.1f} days")
+
+    colors = plt.cm.Oranges(np.linspace(0.3, 1, num_tasks))
+    fig_gantt, ax_gantt = plt.subplots(figsize=(8, 5), facecolor='#fff')
+
+    # Plot each task using the stored start_times
+    for i, row in task_df.iterrows():
+        color = colors[i]
+        bar = ax_gantt.barh(i, durations_risk[i], left=start_times[i], height=0.4,
+                            align="center", color=color, edgecolor="#1a2a44", alpha=0.9)
+        # Add task name + duration at the end of the bar
+        ax_gantt.text(start_times[i] + durations_risk[i] + 0.5, i,
+                      f"{row['Task']} ({durations_risk[i]:.0f}d)",
+                      ha="left", va="center", fontsize=8, fontfamily='Arial')
+        # Hover info
+        mplcursors.cursor(bar, hover=True).connect("add", lambda sel: sel.annotation.set_text(
+            f"Task: {tasks[sel.index]}\nDuration: {durations_risk[sel.index]:.1f} days\nRisk: {task_df['Risk (0-5)'][sel.index]:.1f}"
+        ))
+
+    # Draw dependency arrows using stored finish_times
+    adjacency = np.zeros((num_tasks, num_tasks))
+    for i, row in task_df.iterrows():
+        deps = str(row['Dependencies (IDs)']).split(",") if row['Dependencies (IDs)'] else []
+        deps = [int(d.strip()) - 1 for d in deps if d.strip().isdigit()]
+        for d in deps:
+            adjacency[d, i] = 1
+
+    for i in range(num_tasks):
+        preds = np.where(adjacency[:, i] > 0)[0]
+        for p in preds:
+            ax_gantt.annotate("",
+                              xy=(start_times[i], i),
+                              xytext=(finish_times[p], p),
+                              arrowprops=dict(arrowstyle="->", color="#1a2a44", lw=1.5))
+
+    ax_gantt.set_yticks(range(num_tasks))
+    ax_gantt.set_yticklabels([f"{i + 1}" for i in range(num_tasks)], fontsize=10, fontfamily='Arial')
+    ax_gantt.invert_yaxis()
+    ax_gantt.set_xlabel("Time (days)", fontsize=12, fontfamily='Arial')
+    ax_gantt.set_ylabel("Task ID", fontsize=12, fontfamily='Arial')
+    ax_gantt.set_title("Gantt Chart (Classical)", fontsize=14, fontfamily='Arial', pad=10)
+    ax_gantt.grid(True, axis="x", linestyle="--", alpha=0.7, color='#2a4066')
+    ax_gantt.set_facecolor('#fff')
+    st.pyplot(fig_gantt, use_container_width=True)
+# -------------------------------
+# Eigenvalue Tab
+# -------------------------------
+
+# Add this function to your view.py file
+
+def render_monte_carlo_gantt_chart(model):
+    """Render Monte Carlo Gantt chart with confidence bands"""
+
+    if not model.simulation_data.get("monte_carlo_results"):
+        st.info("🎲 Run Monte Carlo analysis to view probabilistic Gantt chart")
+        return
+
+    st.subheader("📊 Monte Carlo Gantt Chart")
+
+    # Get Monte Carlo results
+    mc_results = model.simulation_data["monte_carlo_results"]
+    task_df = model.task_df
+    num_tasks = len(task_df)
+
+    # Controls
+    col1, col2 = st.columns(2)
+    with col1:
+        confidence_level = st.selectbox(
+            "Confidence Level for Bands",
+            options=mc_results["confidence_levels"],
+            index=0
+        )
+    with col2:
+        show_criticality = st.checkbox("Show Critical Path Probability", value=True)
+
+    # Create Gantt chart
+    fig, ax = plt.subplots(figsize=(12, max(6, num_tasks * 0.4)))
+
+    # Color scheme
+    colors = plt.cm.Set3(np.linspace(0, 1, num_tasks))
+
+    # Get percentile keys for selected confidence level
+    lower_key = f"P{int((100 - confidence_level) / 2)}"
+    upper_key = f"P{int(100 - (100 - confidence_level) / 2)}"
+
+    for i, row in task_df.iterrows():
+        color = colors[i]
+
+        # Get confidence intervals
+        start_lower = mc_results["task_start_percentiles"][lower_key][i]
+        start_upper = mc_results["task_start_percentiles"][upper_key][i]
+        finish_lower = mc_results["task_finish_percentiles"][lower_key][i]
+        finish_upper = mc_results["task_finish_percentiles"][upper_key][i]
+
+        mean_start = mc_results["mean_start_times"][i]
+        mean_finish = mc_results["mean_finish_times"][i]
+
+        # Draw confidence band
+        ax.barh(i, finish_upper - start_lower, left=start_lower, height=0.3,
+                alpha=0.3, color=color,
+                label=f"{confidence_level}% Confidence" if i == 0 else "")
+
+        # Draw mean duration bar
+        mean_duration = mean_finish - mean_start
+        ax.barh(i, mean_duration, left=mean_start, height=0.6,
+                alpha=0.8, color=color, edgecolor='black', linewidth=1)
+
+        # Add task name and criticality
+        task_name = row['Task']
+        criticality = mc_results["task_criticality"][i]
+
+        if show_criticality and criticality > 10:
+            label = f"{task_name} ({criticality:.0f}% critical)"
+            color_text = 'red' if criticality > 80 else 'orange' if criticality > 50 else 'black'
+        else:
+            label = task_name
+            color_text = 'black'
+
+        ax.text(mean_finish + 0.5, i, label, va='center', fontsize=9, color=color_text)
+
+    # Format chart
+    ax.set_yticks(range(num_tasks))
+    ax.set_yticklabels([f"Task {i + 1}" for i in range(num_tasks)])
+    ax.invert_yaxis()
+    ax.set_xlabel("Time (days)")
+    ax.set_ylabel("Tasks")
+    ax.set_title(f"Monte Carlo Gantt Chart ({confidence_level}% Confidence Bands)")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+
+    st.pyplot(fig, use_container_width=True)
+
+# -------------------------------
+# Eigenvalue Tab
+# -------------------------------
+def render_eigenvalue_tab(model):
+    if not model.simulation_data.get("tasks"):
+        st.info("Please run the simulation to view eigenvalue data.")
+        return
+
+    st.subheader("Eigenvalue Analysis")
+    eigenvalues, second_eigenvalue, error = model.compute_eigenvalues()
+    if error:
+        st.error(error)
+        return
+    num_tasks = len(model.simulation_data["tasks"])
+    adjacency = model.simulation_data["adjacency"]
+
+    st.write("### Eigenvalues of Adjacency Matrix")
+    st.write("The eigenvalues represent the spectral properties of the task dependency structure.")
+    df_eigen = pd.DataFrame({"Eigenvalue": np.real(eigenvalues), "Imaginary": np.imag(eigenvalues)})
+    st.table(df_eigen)
+    st.write(f"### Second Eigenvalue (Fiedler Value) for Centrality: {second_eigenvalue:.4f}")
+    st.write("Note: The second smallest eigenvalue of the Laplacian indicates graph connectivity/centrality.")
+
+    fig_bar, ax_bar = plt.subplots(figsize=(6, 4), facecolor='#fff')
+    ax_bar.bar(range(len(np.real(eigenvalues))), np.real(eigenvalues), color='#f28c38', edgecolor='#1a2a44')
+    ax_bar.set_xlabel("Task Index", fontsize=12, fontfamily='Arial', color='#1a2a44')
+    ax_bar.set_ylabel("Real Eigenvalue", fontsize=12, fontfamily='Arial', color='#1a2a44')
+    ax_bar.set_title("Real Part of Eigenvalues", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
+    ax_bar.grid(True, linestyle="--", alpha=0.7, color='#2a4066')
+    ax_bar.set_facecolor('#fff')
+    ax_bar.tick_params(colors='#1a2a44')
+    st.pyplot(fig_bar, use_container_width=True)
+
+    st.write("### Connectivity Matrix (Adjacency)")
+    st.write("Visual representation of task dependencies.")
+    df_connectivity = pd.DataFrame(adjacency, index=[f"Task {i + 1}" for i in range(num_tasks)],
+                                   columns=[f"Task {i + 1}" for i in range(num_tasks)])
+    fig_heat, ax_heat = plt.subplots(figsize=(6, 4), facecolor='#fff')
+    sns.heatmap(df_connectivity, annot=True, cmap="Oranges", cbar_kws={'label': 'Dependency Strength'}, ax=ax_heat)
+    ax_heat.set_xlabel("Task ID", fontsize=12, fontfamily='Arial', color='#1a2a44')
+    ax_heat.set_ylabel("Task ID", fontsize=12, fontfamily='Arial', color='#1a2a44')
+    ax_heat.set_title("Adjacency Matrix Heatmap", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
+    st.pyplot(fig_heat, use_container_width=True)
+
+# -------------------------------
+# PDE Gantt Tab with Critical Path
+# -------------------------------
+def render_pde_gantt(model):
+    if not model.simulation_data.get("tasks"):
+        st.info("Run the simulation to view the PDE Gantt chart.")
+        return
+
+    task_df = model.task_df.copy()
+    tasks = model.simulation_data["tasks"]
+    num_tasks = model.simulation_data["num_tasks"]
+    start_times = model.simulation_data["start_times_risk"]
+    finish_times = model.simulation_data["finish_times_risk"]
+    durations_risk = model.simulation_data["durations_risk"]
+
+    pde_completion_time = np.max(finish_times)
+    st.subheader("PDE Gantt Chart")
+    st.write(f"**Time to Completion:** PDE: {pde_completion_time:.1f} days")
+
+    colors = plt.cm.Oranges(np.linspace(0.3, 1, num_tasks))
+    fig_gantt, ax_gantt = plt.subplots(figsize=(8,5), facecolor='#fff')
+
+    for i, row in task_df.iterrows():
+        color = colors[i]
+        bar = ax_gantt.barh(i, durations_risk[i], left=start_times[i], height=0.4,
+                            align="center", color=color, edgecolor="#1a2a44", alpha=0.9)
+        # Task name + duration at end of bar
+        ax_gantt.text(start_times[i] + durations_risk[i] + 0.5, i,
+                      f"{row['Task']} ({durations_risk[i]:.0f}d)",
+                      ha="left", va="center", fontsize=8, fontfamily='Arial')
+        # Hover info
+        mplcursors.cursor(bar, hover=True).connect("add", lambda sel: sel.annotation.set_text(
+            f"Task: {tasks[sel.index]}\nDuration: {durations_risk[sel.index]:.1f} days\nRisk: {row['Risk (0-5)']:.1f}"
+        ))
+
+    # Draw arrows
+    adjacency = model.simulation_data["adjacency"]
+    for i in range(num_tasks):
+        preds = np.where(adjacency[:, i] > 0)[0]
+        for p in preds:
+            ax_gantt.annotate("",
+                              xy=(start_times[i], i),
+                              xytext=(finish_times[p], p),
+                              arrowprops=dict(arrowstyle="->", color="#1a2a44", lw=1.5))
+
+    ax_gantt.set_yticks(range(num_tasks))
+    ax_gantt.set_yticklabels([f"{i+1}" for i in range(num_tasks)], fontsize=10, fontfamily='Arial')
+    ax_gantt.invert_yaxis()
+    ax_gantt.set_xlabel("Time (days)", fontsize=12, fontfamily='Arial')
+    ax_gantt.set_ylabel("Task ID", fontsize=12, fontfamily='Arial')
+    ax_gantt.set_title("Gantt Chart (PDE)", fontsize=14, fontfamily='Arial', pad=10)
+    ax_gantt.grid(True, axis="x", linestyle="--", alpha=0.7, color='#2a4066')
+    ax_gantt.set_facecolor('#fff')
+    st.pyplot(fig_gantt, use_container_width=True)
+
+
+# -------------------------------
+# Eigenvalue Tab
+# -------------------------------
+def render_eigenvalue_tab(model):
+    if not model.simulation_data.get("tasks"):
+        st.info("Please run the simulation to view eigenvalue data.")
+        return
+
+    st.subheader("Eigenvalue Analysis")
+    eigenvalues, second_eigenvalue, error = model.compute_eigenvalues()
+    if error:
+        st.error(error)
+        return
+    num_tasks = len(model.simulation_data["tasks"])
+    adjacency = model.simulation_data["adjacency"]
+
+    st.write("### Eigenvalues of Adjacency Matrix")
+    st.write("The eigenvalues represent the spectral properties of the task dependency structure.")
+    df_eigen = pd.DataFrame({"Eigenvalue": np.real(eigenvalues), "Imaginary": np.imag(eigenvalues)})
+    st.table(df_eigen)
+    st.write(f"### Second Eigenvalue (Fiedler Value) for Centrality: {second_eigenvalue:.4f}")
+    st.write("Note: The second smallest eigenvalue of the Laplacian indicates graph connectivity/centrality.")
+
+    fig_bar, ax_bar = plt.subplots(figsize=(6, 4), facecolor='#fff')
+    ax_bar.bar(range(len(np.real(eigenvalues))), np.real(eigenvalues), color='#f28c38', edgecolor='#1a2a44')
+    ax_bar.set_xlabel("Task Index", fontsize=12, fontfamily='Arial', color='#1a2a44')
+    ax_bar.set_ylabel("Real Eigenvalue", fontsize=12, fontfamily='Arial', color='#1a2a44')
+    ax_bar.set_title("Real Part of Eigenvalues", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
+    ax_bar.grid(True, linestyle="--", alpha=0.7, color='#2a4066')
+    ax_bar.set_facecolor('#fff')
+    ax_bar.tick_params(colors='#1a2a44')
+    st.pyplot(fig_bar, use_container_width=True)
+
+    st.write("### Connectivity Matrix (Adjacency)")
+    st.write("Visual representation of task dependencies.")
+    df_connectivity = pd.DataFrame(adjacency, index=[f"Task {i + 1}" for i in range(num_tasks)],
+                                   columns=[f"Task {i + 1}" for i in range(num_tasks)])
+    fig_heat, ax_heat = plt.subplots(figsize=(6, 4), facecolor='#fff')
+    sns.heatmap(df_connectivity, annot=True, cmap="Oranges", cbar_kws={'label': 'Dependency Strength'}, ax=ax_heat)
+    ax_heat.set_xlabel("Task ID", fontsize=12, fontfamily='Arial', color='#1a2a44')
+    ax_heat.set_ylabel("Task ID", fontsize=12, fontfamily='Arial', color='#1a2a44')
+    ax_heat.set_title("Adjacency Matrix Heatmap", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
+    st.pyplot(fig_heat, use_container_width=True)

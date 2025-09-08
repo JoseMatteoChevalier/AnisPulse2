@@ -1,0 +1,177 @@
+/* Root variables for light theme */
+:root {
+    --background-color: #f5f7fa;
+    --text-color: #0d47a1;
+    --text-secondary: #4b5e8e;
+    --sidebar-background: #1e1e1e;
+    --border-color: #bbdefb;
+    --primary-color: #0d47a1;
+    --secondary-color: #e3f2fd;
+    --button-bg: #1e88e5;
+    --button-hover: #1565c0;
+    --alert-bg: #bbdefb;
+}
+
+/* Dark theme overrides */
+[data-theme="dark"] {
+    --background-color: #1e1e1e;
+    --text-color: #e3f2fd;
+    --text-secondary: #b0bec5;
+    --sidebar-background: #121212;
+    --border-color: #4b5e8e;
+    --primary-color: #bbdefb;
+    --secondary-color: #4b5e8e;
+    --button-bg: #42a5f5;
+    --button-hover: #1e88e5;
+    --alert-bg: #37474f;
+}
+
+/* Main app container */
+.main {
+    background-color: var(--background-color);
+    padding: 20px;
+    border-radius: 10px;
+    min-height: 100vh;
+    transition: background-color 0.3s ease;
+}
+
+/* Headings */
+h1, h2, h3, h4 {
+    color: var(--primary-color);
+    font-family: 'Roboto', sans-serif;
+    margin-bottom: 10px;
+}
+
+/* Sidebar styling */
+.stSidebar {
+    background-color: var(--sidebar-background) !important;
+    color: var(--text-color) !important;
+    border-right: 1px solid var(--border-color);
+    padding: 15px;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.stSidebar h2, .stSidebar h3, .stSidebar h4 {
+    color: var(--text-color) !important;
+    font-family: 'Roboto', sans-serif;
+}
+
+.stSidebar p, .stSidebar span, .stSidebar div, .stSidebar label {
+    color: var(--text-secondary) !important;
+    font-family: 'Roboto', sans-serif;
+}
+
+.stSidebar a {
+    color: var(--button-bg) !important;
+    transition: color 0.2s ease;
+}
+
+.stSidebar a:hover {
+    color: var(--button-hover) !important;
+}
+
+/* Buttons */
+.stButton>button {
+    background-color: var(--button-bg);
+    color: white;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 500;
+    border: none;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.stButton>button:hover {
+    background-color: var(--button-hover);
+    transform: translateY(-2px);
+}
+
+/* Tabs */
+.stTabs [data-baseweb="tab"] {
+    font-size: 16px;
+    font-weight: bold;
+    color: var(--text-color);
+    font-family: 'Roboto', sans-serif;
+    padding: 10px 15px;
+    transition: color 0.3s ease;
+}
+
+.stTabs [data-baseweb="tab"]:hover {
+    color: var(--button-bg);
+}
+
+/* Alerts */
+.stAlert {
+    border-radius: 8px;
+    background-color: var(--alert-bg);
+    color: var(--text-color);
+    font-family: 'Roboto', sans-serif;
+    padding: 10px;
+}
+
+/* Data Editor */
+.stDataFrame {
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: var(--background-color);
+}
+
+.stDataFrame table {
+    font-family: 'Roboto', sans-serif;
+    color: var(--text-color);
+}
+
+.stDataFrame th {
+    background-color: var(--secondary-color) !important;
+    color: var(--text-color) !important;
+}
+
+/* File Uploader */
+.stFileUploader {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px;
+    background-color: var(--background-color);
+}
+
+/* Sliders */
+.stSlider [data-baseweb="slider"] {
+    font-family: 'Roboto', sans-serif;
+    color: var(--text-color);
+}
+
+.stSlider [data-baseweb="slider"] .thumbValue {
+    background-color: var(--button-bg);
+}
+
+/* Progress Bar */
+.stProgress .st-bo {
+    background-color: var(--button-bg);
+}
+
+/* Plotly Charts */
+.plotly-graph-div {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Ensure accessibility */
+:focus {
+    outline: 2px solid var(--button-bg);
+    outline-offset: 2px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .main {
+        padding: 10px;
+    }
+    .stSidebar {
+        padding: 10px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        font-size: 14px;
+        padding: 8px 10px;
+    }
+}

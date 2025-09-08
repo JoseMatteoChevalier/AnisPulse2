@@ -1,0 +1,50 @@
+[
+    {
+        "Select":false,
+        "ID":1,
+        "Task":"Requirements",
+        "Duration (days)":14.0,
+        "Dependencies (IDs)":"",
+        "Risk (0-5)":0.0
+    },
+    {
+        "Select":false,
+        "ID":2,
+        "Task":"Database Design",
+        "Duration (days)":21.0,
+        "Dependencies (IDs)":"1",
+        "Risk (0-5)":0.0
+    },
+    {
+        "Select":false,
+        "ID":3,
+        "Task":"Backend API",
+        "Duration (days)":28.0,
+        "Dependencies (IDs)":"2",
+        "Risk (0-5)":1.0
+    },
+    {
+        "Select":false,
+        "ID":4,
+        "Task":"Third-party Integration",
+        "Duration (days)":21.0,
+        "Dependencies (IDs)":"3",
+        "Risk (0-5)":0.0
+    },
+    {
+        "Select":false,
+        "ID":5,
+        "Task":"Frontend UI",
+        "Duration (days)":35.0,
+        "Dependencies (IDs)":"2",
+        "Risk (0-5)":2.0
+    },
+    {
+        "Select":false,
+        "ID":6,
+        "Task":"Testing & Deployment",
+        "Duration (days)":14.0,
+        "Dependencies (IDs)":"4,5",
+        "Risk (0-5)":0.0
+    }
+]
