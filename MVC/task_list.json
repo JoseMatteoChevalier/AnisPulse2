@@ -1,16 +1,16 @@
 [
   {
     "id": 1,
-    "name": "Requirements Analysis",
-    "duration": 10.0,
+    "name": "Literature Review",
+    "duration": 21.0,
     "dependencies": [],
     "risk_level": 0.5,
     "parent_id": null
   },
   {
     "id": 2,
-    "name": "Database Design",
-    "duration": 15.0,
+    "name": "Hypothesis Formation",
+    "duration": 7.0,
     "dependencies": [
       1
     ],
@@ -19,40 +19,39 @@
   },
   {
     "id": 3,
-    "name": "Backend API Development",
-    "duration": 20.0,
+    "name": "Experimental Design",
+    "duration": 14.0,
     "dependencies": [
       2
-    ],
-    "risk_level": 2.5,
-    "parent_id": null
-  },
-  {
-    "id": 4,
-    "name": "Third-party Integration",
-    "duration": 12.0,
-    "dependencies": [
-      3
     ],
     "risk_level": 1.5,
     "parent_id": null
   },
   {
-    "id": 5,
-    "name": "Frontend UI Development",
-    "duration": 18.0,
+    "id": 4,
+    "name": "Data Collection",
+    "duration": 35.0,
     "dependencies": [
-      2
+      3
     ],
-    "risk_level": 2.0,
+    "risk_level": 4.0,
+    "parent_id": null
+  },
+  {
+    "id": 5,
+    "name": "Data Analysis",
+    "duration": 21.0,
+    "dependencies": [
+      4
+    ],
+    "risk_level": 3.0,
     "parent_id": null
   },
   {
     "id": 6,
-    "name": "Testing & Deployment",
-    "duration": 8.0,
+    "name": "Report Writing",
+    "duration": 14.0,
     "dependencies": [
-      4,
       5
     ],
     "risk_level": 1.0,

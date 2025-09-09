@@ -387,25 +387,61 @@ class MainController:
         self.task_controller.add_observer(self)
         self.simulation_controller.add_observer(self)
 
+    # Replace your on_model_change method in controller.py with this:
+
     def on_model_change(self, event_type: str, data: Dict[str, Any]):
-        """Handle model change notifications"""
-        if event_type in ["task_added", "task_updated", "tasks_deleted", "tasks_imported"]:
-            # Clear simulation results when tasks change
+        """Handle model change notifications - BULLETPROOF VERSION with diagnostics"""
+        print(f"🔍 Model change triggered: {event_type} with data: {data}")
+        print(f"🔍 Current task count: {len(self.model.task_df)}")
+
+        # Check current simulation data state before clearing
+        if self.model.simulation_data.get("start_times_classical") is not None:
+            current_classical_size = len(self.model.simulation_data["start_times_classical"])
+            print(f"🔍 Current classical arrays size: {current_classical_size}")
+
+        if event_type in ["task_added", "task_updated", "tasks_deleted", "tasks_imported", "template_loaded"]:
+            # Clear ALL simulation results when tasks change
             self.model.simulation_data = {
+                # Basic simulation data
                 "tasks": None,
                 "adjacency": None,
-                "u_matrix": None,
                 "num_tasks": None,
+
+                # PDE simulation results
+                "u_matrix": None,
                 "start_times_risk": None,
                 "finish_times_risk": None,
                 "durations_risk": None,
                 "simulation_time": None,
                 "risk_curve": None,
+
+                # Classical simulation results
                 "classical_risk": None,
                 "start_times_classical": None,
+                "finish_times_classical": None,
+
+                # Monte Carlo simulation results
+                "monte_carlo_results": None,
+
+                # SDE simulation results
                 "sde_results": None,
-                "finish_times_classical": None
+
+                # Any other simulation data that might exist
+                "eigenvalues": None,
+                "critical_path": None,
+                "task_statistics": None,
+                "project_metrics": None
             }
+
+            # Also clear any cached properties in the model itself
+            if hasattr(self.model, 'simulation_results'):
+                self.model.simulation_results = None
+
+            print(f"🧹 Cleared all simulation data due to: {event_type}")
+            print(f"🧹 All arrays reset to None")
+        else:
+            print(f"🔍 Event {event_type} did not trigger clearing")
+
 
     def run_sde_simulation(self, sde_params=None):
         """Run SDE simulation with optional parameters"""

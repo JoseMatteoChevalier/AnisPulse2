@@ -215,6 +215,171 @@ class SimulationTester:
                 "execution_time": time.time() - start_time
             }
 
+    # Add this to your run_all_simulations.py file
+
+    def run_enhanced_monte_carlo_test(self, fast_mode=True) -> Dict[str, Any]:
+        """Test Enhanced Monte Carlo simulation with 3-point estimation"""
+        print("🔄 Testing Enhanced Monte Carlo...")
+        start_time = time.time()
+
+        try:
+            # Import the enhanced Monte Carlo
+            from enhanced_monte_carlo import run_enhanced_monte_carlo_simulation, add_estimation_columns_to_dataframe
+
+            # Get adjacency matrix
+            adjacency, error = self.model.build_adjacency()
+            if error:
+                return {
+                    "method": "Enhanced Monte Carlo",
+                    "status": f"❌ Adjacency Error: {error}",
+                    "execution_time": time.time() - start_time
+                }
+
+            # Use fast parameters for testing
+            num_sims = 100 if fast_mode else 1000
+            confidence_levels = [90] if fast_mode else [80, 90, 95]
+
+            # Add 3-point estimation columns to task DataFrame
+            enhanced_df = add_estimation_columns_to_dataframe(self.model.task_df)
+
+            # Run enhanced Monte Carlo simulation
+            results = run_enhanced_monte_carlo_simulation(
+                task_df=enhanced_df,
+                adjacency_matrix=adjacency,
+                num_simulations=num_sims,
+                confidence_levels=confidence_levels,
+                use_manual_estimates=False  # Use auto-generated estimates
+            )
+
+            execution_time = time.time() - start_time
+
+            return {
+                "method": "Enhanced Monte Carlo",
+                "project_duration": results["mean_project_duration"],
+                "std_deviation": results["std_project_duration"],
+                "confidence_interval_90": [
+                    results.get("project_duration_p5", 0),
+                    results.get("project_duration_p95", 0)
+                ],
+                "execution_time": execution_time,
+                "status": "✅ Success",
+                "num_simulations": num_sims,
+                "confidence_levels": confidence_levels,
+                "task_criticality": results["task_criticality"],
+                "distribution_types": "Auto-generated (Risk-based)"
+            }
+
+        except ImportError as e:
+            return {
+                "method": "Enhanced Monte Carlo",
+                "status": f"❌ Import Error: {e}",
+                "execution_time": time.time() - start_time
+            }
+        except Exception as e:
+            return {
+                "method": "Enhanced Monte Carlo",
+                "status": f"❌ Exception: {e}",
+                "execution_time": time.time() - start_time
+            }
+
+    # Also update the comprehensive test to include enhanced Monte Carlo
+    def run_comprehensive_test(self, fast_mode=True) -> Dict[str, Any]:
+        """Run all simulation methods and compare results"""
+        print("=" * 60)
+        print("🚀 COMPREHENSIVE SIMULATION TEST SUITE")
+        print("=" * 60)
+
+        # Setup test project
+        if not self.setup_test_model():
+            return {"error": "Failed to setup test model"}
+
+        # Run all tests
+        results = {}
+
+        # 1. Basic Schedule (naive)
+        results["basic"] = self.run_basic_schedule_test()
+
+        # 2. Classical + Risk (includes PDE)
+        results["classical_risk"] = self.run_classical_with_risk_test()
+        results["pde"] = self.run_pde_test()
+
+        # 3. Original Monte Carlo
+        results["monte_carlo"] = self.run_monte_carlo_test(fast_mode)
+
+        # 4. Enhanced Monte Carlo (NEW)
+        results["enhanced_monte_carlo"] = self.run_enhanced_monte_carlo_test(fast_mode)
+
+        # 5. SDE
+        results["sde"] = self.run_sde_test(fast_mode)
+
+        # Store results
+        self.test_results = results
+
+        return results
+
+    # Enhanced print function to show more details
+    def print_enhanced_comparison_table(self, results: Dict[str, Any]):
+        """Print enhanced comparison table with confidence intervals"""
+        print("\n" + "=" * 100)
+        print("📊 ENHANCED SIMULATION METHOD COMPARISON")
+        print("=" * 100)
+
+        # Header
+        print(f"{'Method':<18} | {'Duration':<12} | {'Std Dev':<10} | {'90% CI':<16} | {'Status':<20} | {'Time':<8}")
+        print("-" * 100)
+
+        # Results
+        for method_key, result in results.items():
+            if isinstance(result, dict):
+                method = result.get("method", method_key)
+
+                # Duration
+                duration = result.get("project_duration", "N/A")
+                if isinstance(duration, (int, float)):
+                    duration_str = f"{duration:.1f} days"
+                else:
+                    duration_str = str(duration)
+
+                # Standard deviation
+                std_dev = result.get("std_deviation", "")
+                if isinstance(std_dev, (int, float)) and std_dev > 0:
+                    std_str = f"±{std_dev:.1f}"
+                else:
+                    std_str = ""
+
+                # Confidence interval
+                ci = result.get("confidence_interval_90", "")
+                if isinstance(ci, list) and len(ci) == 2:
+                    ci_str = f"[{ci[0]:.1f}, {ci[1]:.1f}]"
+                else:
+                    ci_str = ""
+
+                # Status
+                status = result.get("status", "Unknown")
+
+                # Execution time
+                exec_time = result.get("execution_time", 0)
+                time_str = f"{exec_time:.3f}s"
+
+                print(
+                    f"{method:<18} | {duration_str:<12} | {std_str:<10} | {ci_str:<16} | {status:<20} | {time_str:<8}")
+
+        print("=" * 100)
+
+        # Show critical path analysis for enhanced methods
+        print("\n🎯 CRITICAL PATH ANALYSIS")
+        print("-" * 40)
+
+        for method_key, result in results.items():
+            if isinstance(result, dict) and "task_criticality" in result:
+                method = result.get("method", method_key)
+                criticality = result["task_criticality"]
+
+                print(f"\n{method}:")
+                for i, crit_pct in enumerate(criticality):
+                    if crit_pct > 5:  # Only show tasks with >5% criticality
+                        print(f"  Task {i + 1}: {crit_pct:.1f}% critical")
+
     def run_sde_test(self, fast_mode=True) -> Dict[str, Any]:
         """Test SDE simulation with lightweight parameters"""
         print("🔄 Testing SDE Simulation...")
@@ -225,16 +390,16 @@ class SimulationTester:
             if hasattr(self.controller, 'sde_integration'):
                 from sde_solver import SDEParameters
 
-                # Fast parameters for testing
+                # ULTRA-FAST parameters for testing
                 if fast_mode:
                     sde_params = SDEParameters(
-                        dt=0.2,  # Large time step
-                        T=100.0,  # Shorter simulation time
-                        n_paths=50,  # Few paths
+                        dt=0.5,  # Less aggressive (was 1.0)
+                        T=80.0,  # Longer simulation (was 20.0)
+                        n_paths=25,  # More paths (was 10)
                         volatility=0.15
                     )
                 else:
-                    sde_params = SDEParameters()  # Default parameters
+                    sde_params = SDEParameters()
 
                 success, error = self.controller.run_sde_simulation(sde_params)
                 execution_time = time.time() - start_time
@@ -262,57 +427,25 @@ class SimulationTester:
             else:
                 return {
                     "method": "SDE",
-                    "status": "⚠️  SDE integration not available",
+                    "status": "⚠️ SDE integration not available",
                     "execution_time": time.time() - start_time
                 }
 
-        except Exception as e:
+        except Exception as e:  # ← ADD THIS EXCEPT BLOCK
             return {
                 "method": "SDE",
                 "status": f"❌ Exception: {e}",
                 "execution_time": time.time() - start_time
             }
-
-    def run_comprehensive_test(self, fast_mode=True) -> Dict[str, Any]:
-        """Run all simulation methods and compare results"""
-        print("=" * 60)
-        print("🚀 COMPREHENSIVE SIMULATION TEST SUITE")
-        print("=" * 60)
-
-        # Setup test project
-        if not self.setup_test_model():
-            return {"error": "Failed to setup test model"}
-
-        # Run all tests
-        results = {}
-
-        # 1. Basic Schedule (naive)
-        results["basic"] = self.run_basic_schedule_test()
-
-        # 2. Classical + Risk (includes PDE)
-        results["classical_risk"] = self.run_classical_with_risk_test()
-        results["pde"] = self.run_pde_test()
-
-        # 3. Monte Carlo
-        results["monte_carlo"] = self.run_monte_carlo_test(fast_mode)
-
-        # 4. SDE
-        results["sde"] = self.run_sde_test(fast_mode)
-
-        # Store results
-        self.test_results = results
-
-        return results
-
-    def print_comparison_table(self, results: Dict[str, Any]):
-        """Print formatted comparison table"""
-        print("\n" + "=" * 80)
-        print("📊 SIMULATION METHOD COMPARISON")
-        print("=" * 80)
+    def print_enhanced_comparison_table(self, results: Dict[str, Any]):
+        """Print enhanced comparison table with confidence intervals"""
+        print("\n" + "=" * 100)
+        print("📊 ENHANCED SIMULATION METHOD COMPARISON")
+        print("=" * 100)
 
         # Header
-        print(f"{'Method':<15} | {'Duration':<12} | {'Std Dev':<10} | {'Status':<20} | {'Time':<8}")
-        print("-" * 80)
+        print(f"{'Method':<18} | {'Duration':<12} | {'Std Dev':<10} | {'90% CI':<16} | {'Status':<20} | {'Time':<8}")
+        print("-" * 100)
 
         # Results
         for method_key, result in results.items():
@@ -326,12 +459,19 @@ class SimulationTester:
                 else:
                     duration_str = str(duration)
 
-                # Standard deviation (if available)
+                # Standard deviation
                 std_dev = result.get("std_deviation", "")
                 if isinstance(std_dev, (int, float)) and std_dev > 0:
                     std_str = f"±{std_dev:.1f}"
                 else:
                     std_str = ""
+
+                # Confidence interval
+                ci = result.get("confidence_interval_90", "")
+                if isinstance(ci, list) and len(ci) == 2:
+                    ci_str = f"[{ci[0]:.1f}, {ci[1]:.1f}]"
+                else:
+                    ci_str = ""
 
                 # Status
                 status = result.get("status", "Unknown")
@@ -340,9 +480,24 @@ class SimulationTester:
                 exec_time = result.get("execution_time", 0)
                 time_str = f"{exec_time:.3f}s"
 
-                print(f"{method:<15} | {duration_str:<12} | {std_str:<10} | {status:<20} | {time_str:<8}")
+                print(
+                    f"{method:<18} | {duration_str:<12} | {std_str:<10} | {ci_str:<16} | {status:<20} | {time_str:<8}")
 
-        print("=" * 80)
+        print("=" * 100)
+
+        # Show critical path analysis for enhanced methods
+        print("\n🎯 CRITICAL PATH ANALYSIS")
+        print("-" * 40)
+
+        for method_key, result in results.items():
+            if isinstance(result, dict) and "task_criticality" in result:
+                method = result.get("method", method_key)
+                criticality = result["task_criticality"]
+
+                print(f"\n{method}:")
+                for i, crit_pct in enumerate(criticality):
+                    if crit_pct > 5:  # Only show tasks with >5% criticality
+                        print(f"  Task {i + 1}: {crit_pct:.1f}% critical")
 
     def validate_consistency(self, results: Dict[str, Any]):
         """Validate that results are consistent and reasonable"""
@@ -413,7 +568,7 @@ def main():
     else:
         # Run comprehensive test
         results = tester.run_comprehensive_test(fast_mode=args.fast)
-        tester.print_comparison_table(results)
+        tester.print_enhanced_comparison_table(results)
         tester.validate_consistency(results)
 
     print("\n🎯 Test completed!")

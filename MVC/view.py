@@ -68,14 +68,11 @@ def render_editor_tab(model):
     return task_df, mpp_file
 
 
+
 # -------------------------------
 # Basic Schedule Tab (NEW)
 # -------------------------------
-# -------------------------------
-# Basic Schedule Tab (NEW)
-# -------------------------------
-# Add ONLY this section to your existing view.py file
-# Do NOT modify any other existing functions
+
 
 # -------------------------------
 # Basic Schedule Tab (ADDITION ONLY)
@@ -536,9 +533,60 @@ def update_parent_durations(task_df):
 # Gantt Chart with Critical Path & Subtasks
 # -------------------------------
 def render_classical_gantt(model):
+    # SAFER DEFENSIVE VALIDATION
+    print(f"🔍 Classical Gantt called with {len(model.task_df)} tasks")
+
+    # Check if classical data exists using 'is None' instead of truthiness
+    start_times = model.simulation_data.get("start_times_classical")
+    finish_times = model.simulation_data.get("finish_times_classical")
+
+    if start_times is None:
+        st.info("No classical simulation data. Run simulation first.")
+        print("🔍 No classical simulation data found")
+        return
+
+    if finish_times is None:
+        st.error("Classical finish times missing. Run simulation first.")
+        print("🔍 No classical finish times found")
+        return
+
+    print(f"🔍 Classical arrays: start_times={len(start_times)}, finish_times={len(finish_times)}")
+
+    # Validate array sizes match task count
+    if len(start_times) != len(model.task_df):
+        st.error(
+            f"❌ Data mismatch detected: {len(model.task_df)} tasks but {len(start_times)} classical results. Please re-run simulation.")
+        print(f"🔍 MISMATCH: {len(model.task_df)} tasks vs {len(start_times)} classical results")
+        return
+
+    if len(finish_times) != len(model.task_df):
+        st.error(
+            f"❌ Data mismatch detected: {len(model.task_df)} tasks but {len(finish_times)} finish times. Please re-run simulation.")
+        print(f"🔍 MISMATCH: {len(model.task_df)} tasks vs {len(finish_times)} finish times")
+        return
+
+    print("✅ Classical Gantt validation passed")
+
+    # Continue with your existing code but REMOVE these duplicate lines if they exist:
+    # start_times = model.simulation_data.get("start_times_classical")  # REMOVE THIS
+    # finish_times = model.simulation_data.get("finish_times_classical")  # REMOVE THIS
+
+    # Your existing code continues here...
     if not model.simulation_data.get("tasks"):
         st.info("Run the simulation to view the Gantt chart.")
         return
+
+    task_df = model.task_df.copy()
+    tasks = task_df["Task"].tolist()
+    num_tasks = len(tasks)
+    durations_risk = task_df["Duration (days)"].values
+
+    classical_completion_time = np.max(finish_times)
+    pde_completion_time = np.max(model.simulation_data.get("finish_times_risk", finish_times))
+
+    st.subheader("Classical Gantt Chart")
+    st.write(
+        f"**Time to Completion:** Classical: {classical_completion_time:.1f} days, PDE: {pde_completion_time:.1f} days")
 
     # Get the stored classical schedule data
     start_times = model.simulation_data.get("start_times_classical")
@@ -608,8 +656,17 @@ def render_classical_gantt(model):
 
 # Monte Carlo GANTT#
 
+
+
+#Fixed below#
+
 def render_monte_carlo_gantt_chart(model):
-    """Render Monte Carlo Gantt chart with confidence bands"""
+    """Render Monte Carlo Gantt chart with confidence bands - FIXED VERSION"""
+
+    #TRoubleshooting Code for Testing the Switch Off#
+    #if model.simulation_data.get("monte_carlo_results"):
+    #    render_monte_carlo_debug_info(model)  # Add this line
+    #    render_monte_carlo_gantt_chart(model)  # Your existing call
 
     if not model.simulation_data.get("monte_carlo_results"):
         st.info("🎲 Run Monte Carlo analysis to view probabilistic Gantt chart")
@@ -622,16 +679,73 @@ def render_monte_carlo_gantt_chart(model):
     task_df = model.task_df
     num_tasks = len(task_df)
 
+    # DEBUG: Print array sizes to understand the mismatch
+    st.write("🔍 **Debug Info:**")
+    st.write(f"Number of tasks in DataFrame: {num_tasks}")
+
+    # Check if task_start_percentiles exists and its structure
+    if "task_start_percentiles" in mc_results:
+        task_start_perc = mc_results["task_start_percentiles"]
+        st.write(f"task_start_percentiles keys: {list(task_start_perc.keys())}")
+        for key, values in task_start_perc.items():
+            if hasattr(values, '__len__'):
+                st.write(f"  {key}: length = {len(values)}")
+            else:
+                st.write(f"  {key}: not an array")
+    else:
+        st.error("❌ task_start_percentiles not found in Monte Carlo results")
+        return
+
+    # Check if arrays are the right size
+    confidence_levels = mc_results.get("confidence_levels", [90])
+    if not confidence_levels:
+        st.error("❌ No confidence levels found")
+        return
+
+    # Get percentile keys
+    confidence_level = confidence_levels[0]  # Use first available
+    lower_key = f"P{int((100 - confidence_level) / 2)}"
+    upper_key = f"P{int(100 - (100 - confidence_level) / 2)}"
+
+    st.write(f"Using confidence level: {confidence_level}%")
+    st.write(f"Looking for keys: {lower_key}, {upper_key}")
+
+    # Validate that we have the right keys and array sizes
+    task_start_perc = mc_results.get("task_start_percentiles", {})
+    task_finish_perc = mc_results.get("task_finish_percentiles", {})
+
+    if lower_key not in task_start_perc or upper_key not in task_start_perc:
+        st.error(f"❌ Required percentile keys not found. Available: {list(task_start_perc.keys())}")
+        return
+
+    # Check array sizes match
+    start_lower_array = task_start_perc[lower_key]
+    if len(start_lower_array) != num_tasks:
+        st.error(f"❌ Array size mismatch: Expected {num_tasks} tasks, got {len(start_lower_array)} in percentiles")
+        st.write("This suggests the Monte Carlo simulation stored results for a different number of tasks.")
+        st.write("Try running the Monte Carlo simulation again.")
+        return
+
     # Controls
     col1, col2 = st.columns(2)
     with col1:
+        available_levels = mc_results.get("confidence_levels", [90])
         confidence_level = st.selectbox(
             "Confidence Level for Bands",
-            options=mc_results["confidence_levels"],
+            options=available_levels,
             index=0
         )
     with col2:
         show_criticality = st.checkbox("Show Critical Path Probability", value=True)
+
+    # Recalculate keys based on selected confidence level
+    lower_key = f"P{int((100 - confidence_level) / 2)}"
+    upper_key = f"P{int(100 - (100 - confidence_level) / 2)}"
+
+    # Validate selected keys exist
+    if lower_key not in task_start_perc or upper_key not in task_start_perc:
+        st.error(f"❌ Selected confidence level {confidence_level}% not available")
+        return
 
     # Create Gantt chart
     fig, ax = plt.subplots(figsize=(12, max(6, num_tasks * 0.4)))
@@ -639,44 +753,75 @@ def render_monte_carlo_gantt_chart(model):
     # Color scheme
     colors = plt.cm.Set3(np.linspace(0, 1, num_tasks))
 
-    # Get percentile keys for selected confidence level
-    lower_key = f"P{int((100 - confidence_level) / 2)}"
-    upper_key = f"P{int(100 - (100 - confidence_level) / 2)}"
+    # Get mean times (fallback if percentiles fail)
+    mean_start_times = mc_results.get("mean_start_times")
+    mean_finish_times = mc_results.get("mean_finish_times")
 
+    if mean_start_times is None or len(mean_start_times) != num_tasks:
+        st.error("❌ Mean start times not available or wrong size")
+        return
+    if mean_finish_times is None or len(mean_finish_times) != num_tasks:
+        st.error("❌ Mean finish times not available or wrong size")
+        return
+
+    # Plot each task
     for i, row in task_df.iterrows():
+        if i >= num_tasks:  # Safety check
+            break
+
         color = colors[i]
 
-        # Get confidence intervals
-        start_lower = mc_results["task_start_percentiles"][lower_key][i]
-        start_upper = mc_results["task_start_percentiles"][upper_key][i]
-        finish_lower = mc_results["task_finish_percentiles"][lower_key][i]
-        finish_upper = mc_results["task_finish_percentiles"][upper_key][i]
+        try:
+            # Get confidence intervals - with bounds checking
+            start_lower = task_start_perc[lower_key][i]
+            start_upper = task_start_perc[upper_key][i]
+            finish_lower = task_finish_perc[lower_key][i]
+            finish_upper = task_finish_perc[upper_key][i]
 
-        mean_start = mc_results["mean_start_times"][i]
-        mean_finish = mc_results["mean_finish_times"][i]
+            mean_start = mean_start_times[i]
+            mean_finish = mean_finish_times[i]
 
-        # Draw confidence band
-        ax.barh(i, finish_upper - start_lower, left=start_lower, height=0.3,
-                alpha=0.3, color=color,
-                label=f"{confidence_level}% Confidence" if i == 0 else "")
+            # Draw confidence band
+            ax.barh(i, finish_upper - start_lower, left=start_lower, height=0.3,
+                    alpha=0.3, color=color,
+                    label=f"{confidence_level}% Confidence" if i == 0 else "")
 
-        # Draw mean duration bar
-        mean_duration = mean_finish - mean_start
-        ax.barh(i, mean_duration, left=mean_start, height=0.6,
-                alpha=0.8, color=color, edgecolor='black', linewidth=1)
+            # Draw mean duration bar
+            mean_duration = mean_finish - mean_start
+            ax.barh(i, mean_duration, left=mean_start, height=0.6,
+                    alpha=0.8, color=color, edgecolor='black', linewidth=1)
 
-        # Add task name and criticality
-        task_name = row['Task']
-        criticality = mc_results["task_criticality"][i]
+            # Add task name and criticality
+            task_name = row['Task']
 
-        if show_criticality and criticality > 10:
-            label = f"{task_name} ({criticality:.0f}% critical)"
-            color_text = 'red' if criticality > 80 else 'orange' if criticality > 50 else 'black'
-        else:
-            label = task_name
-            color_text = 'black'
+            if show_criticality and "task_criticality" in mc_results:
+                criticality = mc_results["task_criticality"]
+                if i < len(criticality):
+                    crit_value = criticality[i]
+                    if crit_value > 10:
+                        label = f"{task_name} ({crit_value:.0f}% critical)"
+                        color_text = 'red' if crit_value > 80 else 'orange' if crit_value > 50 else 'black'
+                    else:
+                        label = task_name
+                        color_text = 'black'
+                else:
+                    label = task_name
+                    color_text = 'black'
+            else:
+                label = task_name
+                color_text = 'black'
 
-        ax.text(mean_finish + 0.5, i, label, va='center', fontsize=9, color=color_text)
+            ax.text(mean_finish + 0.5, i, label, va='center', fontsize=9, color=color_text)
+
+        except IndexError as e:
+            st.error(f"❌ Error plotting task {i + 1}: {e}")
+            st.write(f"Task index: {i}, Array sizes:")
+            st.write(f"  start_lower: {len(task_start_perc[lower_key])}")
+            st.write(f"  finish_lower: {len(task_finish_perc[lower_key])}")
+            continue
+        except Exception as e:
+            st.error(f"❌ Unexpected error plotting task {i + 1}: {e}")
+            continue
 
     # Format chart
     ax.set_yticks(range(num_tasks))
@@ -689,6 +834,68 @@ def render_monte_carlo_gantt_chart(model):
     ax.legend()
 
     st.pyplot(fig, use_container_width=True)
+
+
+# Add these functions to the end of view.py
+
+def debug_monte_carlo_results(model):
+    """Debug function to inspect Monte Carlo results structure"""
+
+    if not model.simulation_data.get("monte_carlo_results"):
+        return "No Monte Carlo results found"
+
+    mc_results = model.simulation_data["monte_carlo_results"]
+    task_df = model.task_df
+
+    debug_info = {
+        "num_tasks_in_df": len(task_df),
+        "monte_carlo_keys": list(mc_results.keys()),
+    }
+
+    # Check key arrays
+    for key in ["task_criticality", "mean_start_times", "mean_finish_times"]:
+        if key in mc_results:
+            value = mc_results[key]
+            if hasattr(value, '__len__'):
+                debug_info[f"{key}_length"] = len(value)
+            else:
+                debug_info[f"{key}_type"] = type(value)
+
+    # Check percentiles structure
+    if "task_start_percentiles" in mc_results:
+        perc_data = mc_results["task_start_percentiles"]
+        debug_info["percentile_keys"] = list(perc_data.keys())
+        for key, values in perc_data.items():
+            if hasattr(values, '__len__'):
+                debug_info[f"percentile_{key}_length"] = len(values)
+
+    return debug_info
+
+
+def render_monte_carlo_debug_info(model):
+    """Render debug information for Monte Carlo issues"""
+
+    st.subheader("🔍 Monte Carlo Debug Information")
+
+    debug_info = debug_monte_carlo_results(model)
+
+    if isinstance(debug_info, str):
+        st.write(debug_info)
+        return
+
+    st.write("**Task DataFrame Info:**")
+    st.write(f"Number of tasks: {debug_info.get('num_tasks_in_df', 'Unknown')}")
+
+    st.write("**Monte Carlo Results Structure:**")
+    for key, value in debug_info.items():
+        if key != 'num_tasks_in_df':
+            st.write(f"  {key}: {value}")
+
+    # Show first few tasks from DataFrame
+    st.write("**Task DataFrame Preview:**")
+    st.dataframe(model.task_df[["ID", "Task", "Duration (days)"]].head())
+
+
 
 # -------------------------------
 # Eigenvalue Tab

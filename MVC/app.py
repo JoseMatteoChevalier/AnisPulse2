@@ -172,12 +172,7 @@ def main():
         st.markdown("---")
         st.info("💡 **Note**: This shows the PDE simulation results with risk diffusion between dependent tasks.")
 
-    # Tab 5: Simulation Results
-    # Replace your Simulation tab section in app.py with this ORIGINAL version
 
-    # Tab 5: Simulation Results
-    # Tab 5: Simulation Results
-    # Tab 5: Monte Carlo Gantt (placeholder)
     # Tab 5: Monte Carlo Gantt
     with tabs[4]:
         st.subheader("🎲 Monte Carlo Gantt Chart")
@@ -202,6 +197,10 @@ def main():
                     else:
                         st.error(f"Monte Carlo failed: {error}")
         else:
+            # ADD DEBUG INFO HERE (temporarily for testing)
+            from view import render_monte_carlo_debug_info
+            render_monte_carlo_debug_info(model)
+
             # Display results
             results = model.simulation_data["monte_carlo_results"]
 
@@ -221,7 +220,6 @@ def main():
                 'Risk Level': model.task_df['Risk (0-5)'].values
             }).sort_values('Critical Path %', ascending=False)
 
-            # Color code by criticality
             # Color code by criticality with visible text
             def highlight_criticality(row):
                 if row['Critical Path %'] > 80:
@@ -256,10 +254,11 @@ def main():
                 finish_times_classical = model.simulation_data.get("finish_times_classical")
                 if finish_times_classical is not None and len(finish_times_classical) > 0:
                     classical_duration = np.max(finish_times_classical)
-                else:
-                    classical_duration = 0
-                    delay_risk = ((results['mean_completion'] - classical_duration) / classical_duration * 100) if classical_duration > 0 else 0
+                    delay_risk = ((results[
+                                       'mean_completion'] - classical_duration) / classical_duration * 100) if classical_duration > 0 else 0
                     st.metric("Delay Risk", f"+{delay_risk:.1f}%")
+                else:
+                    st.metric("Delay Risk", "N/A")
             with col4:
                 st.metric("Simulations", f"{results['num_simulations']:,}")
 
@@ -271,7 +270,9 @@ def main():
                        label=f"Mean: {results['mean_completion']:.1f}")
 
             # Add classical completion time for comparison
-            if classical_duration > 0:
+            finish_times_classical = model.simulation_data.get("finish_times_classical")
+            if finish_times_classical is not None and len(finish_times_classical) > 0:
+                classical_duration = np.max(finish_times_classical)
                 ax.axvline(classical_duration, color='blue', linestyle='-',
                            label=f"Classical: {classical_duration:.1f}")
 
@@ -285,7 +286,6 @@ def main():
             st.subheader("Completion Time Percentiles")
             percentiles_df = pd.DataFrame([results['percentiles']])
             st.dataframe(percentiles_df, use_container_width=True)
-
     # Tab 6: SDE Gantt
     with tabs[5]:
         st.subheader("📊 SDE Gantt Chart")
