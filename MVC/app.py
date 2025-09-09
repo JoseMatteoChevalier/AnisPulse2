@@ -222,13 +222,14 @@ def main():
             }).sort_values('Critical Path %', ascending=False)
 
             # Color code by criticality
+            # Color code by criticality with visible text
             def highlight_criticality(row):
                 if row['Critical Path %'] > 80:
-                    return ['background-color: #ffebee'] * len(row)  # Light red
+                    return ['background-color: #ffebee; color: #000000'] * len(row)  # Light red with black text
                 elif row['Critical Path %'] > 50:
-                    return ['background-color: #fff3e0'] * len(row)  # Light orange
+                    return ['background-color: #fff3e0; color: #000000'] * len(row)  # Light orange with black text
                 else:
-                    return [''] * len(row)
+                    return ['color: #000000'] * len(row)  # Just ensure black text
 
             styled_df = criticality_df.style.apply(highlight_criticality, axis=1)
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
@@ -285,15 +286,14 @@ def main():
             percentiles_df = pd.DataFrame([results['percentiles']])
             st.dataframe(percentiles_df, use_container_width=True)
 
-    # Tab 6: SDE Gantt (placeholder)
+    # Tab 6: SDE Gantt
     with tabs[5]:
         st.subheader("📊 SDE Gantt Chart")
-        st.info(
-            "Stochastic Differential Equation modeling coming soon! This will show continuous-time stochastic processes.")
-        st.write("**Features planned:**")
-        st.write("• Continuous stochastic process modeling")
-        st.write("• Path-dependent risk evolution")
-        st.write("• Uncertainty quantification over time")
+
+        from view import render_sde_gantt
+        render_sde_gantt(model, controller)
+
+
 
     # Tab 7: Simulation Results (update index)
     with tabs[6]:

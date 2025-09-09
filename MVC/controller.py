@@ -5,6 +5,9 @@ import numpy as np
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Tuple, List
 from dataclasses import dataclass
+
+from matplotlib import pyplot as plt
+
 from project_templates import ProjectTemplates
 
 
@@ -376,6 +379,10 @@ class MainController:
         self.simulation_controller = SimulationController(model)
         self.import_export_controller = ImportExportController(model)
 
+        # ADD THIS LINE - SDE Integration
+        from sde_solver import SDEModelIntegration
+        self.sde_integration = SDEModelIntegration(model)
+
         # Set up notifications
         self.task_controller.add_observer(self)
         self.simulation_controller.add_observer(self)
@@ -396,8 +403,18 @@ class MainController:
                 "risk_curve": None,
                 "classical_risk": None,
                 "start_times_classical": None,
+                "sde_results": None,
                 "finish_times_classical": None
             }
+
+    def run_sde_simulation(self, sde_params=None):
+        """Run SDE simulation with optional parameters"""
+        return self.sde_integration.run_sde_simulation(sde_params)
+
+    def get_sde_risk_summary(self):
+        """Get SDE risk analysis summary"""
+        return self.sde_integration.get_risk_summary()
+
 
     # Delegate methods
     def add_task(self, **kwargs):

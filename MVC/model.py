@@ -512,7 +512,9 @@ class TaskModel:
             "risk_curve": None,
             "classical_risk": None,
             "start_times_classical": None,
-            "finish_times_classical": None
+            "finish_times_classical": None,
+            # ADD SDE STORAGE
+            "sde_results": None
         }
 
         self.simulation_results: Optional[SimulationResults] = None

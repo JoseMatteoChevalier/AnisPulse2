@@ -7,6 +7,7 @@ import seaborn as sns
 import numpy as np
 import pandas as pd
 import matplotlib.patches as patches
+from sde_solver import SDEParameters
 
 
 # -------------------------------
@@ -605,7 +606,7 @@ def render_classical_gantt(model):
 # Eigenvalue Tab
 # -------------------------------
 
-# Add this function to your view.py file
+# Monte Carlo GANTT#
 
 def render_monte_carlo_gantt_chart(model):
     """Render Monte Carlo Gantt chart with confidence bands"""
@@ -832,3 +833,383 @@ def render_eigenvalue_tab(model):
     ax_heat.set_ylabel("Task ID", fontsize=12, fontfamily='Arial', color='#1a2a44')
     ax_heat.set_title("Adjacency Matrix Heatmap", fontsize=14, fontfamily='Arial', pad=10, color='#1a2a44')
     st.pyplot(fig_heat, use_container_width=True)
+
+#---------------------------------
+# SDE Calculations
+#---------------------------------
+def render_sde_gantt(model, controller):
+    """Render SDE Gantt chart with multiple realizations and confidence bands"""
+
+    st.subheader("📊 SDE Stochastic Simulation")
+
+    # Check if we have SDE results
+    sde_results = model.simulation_data.get("sde_results")
+
+    if sde_results is None:
+        st.info("Run SDE simulation to view stochastic Gantt chart with confidence bands.")
+
+        # SDE Parameter Controls
+        with st.expander("⚙️ SDE Simulation Parameters", expanded=True):
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                n_paths = st.slider("Number of Paths", 100, 2000, 1000, 100,
+                                    help="More paths = better statistics but slower computation")
+                volatility = st.slider("Volatility", 0.05, 0.5, 0.15, 0.05,
+                                       help="Base uncertainty level for all tasks")
+
+            with col2:
+                correlation_strength = st.slider("Dependency Correlation", 0.0, 1.0, 0.5, 0.1,
+                                                 help="How much dependencies correlate uncertainty")
+                dt = st.slider("Time Step", 0.01, 0.1, 0.01, 0.01,
+                               help="Simulation time step (smaller = more accurate)")
+
+            with col3:
+                jump_intensity = st.slider("Jump Intensity", 0.0, 0.5, 0.1, 0.05,
+                                           help="Rate of sudden disruptions")
+                risk_amplification = st.slider("Risk Amplification", 0.5, 3.0, 1.5, 0.1,
+                                               help="How much risk levels affect uncertainty")
+
+        # Run SDE Simulation Button
+        if st.button("🚀 Run SDE Simulation", type="primary", key="run_sde"):
+            st.write("🔍 Debug: Creating SDE parameters...")
+
+            # Create SDE parameters
+            sde_params = SDEParameters(
+                dt=dt,
+                T=max(100, np.sum(model.task_df["Duration (days)"]) * 2),
+                n_paths=n_paths,
+                volatility=volatility,
+                correlation_strength=correlation_strength,
+                jump_intensity=jump_intensity,
+                risk_amplification=risk_amplification
+            )
+
+            st.write(
+                f"🔍 Debug: Parameters created - T={sde_params.T}, dt={sde_params.dt}, n_paths={sde_params.n_paths}")
+            st.write(f"🔍 Debug: This will require {int(sde_params.T / sde_params.dt):,} time steps per path")
+
+            st.write("🔍 Debug: Calling controller...")
+
+            # Run simulation
+            with st.spinner("Running SDE simulation..."):
+                success, error = controller.run_sde_simulation(sde_params)
+
+                st.write(f"🔍 Debug: Controller returned - success={success}, error={error}")
+
+                if success:
+                    st.success("SDE simulation completed successfully!")
+                    st.rerun()
+                else:
+                    st.error(f"SDE simulation failed: {error}")
+        return
+
+    # Display SDE Results
+    st.success("✅ SDE Simulation Results Available")
+
+    # Risk Summary Metrics
+    risk_summary = controller.get_sde_risk_summary()
+    if risk_summary:
+        metrics = risk_summary.get("sde_metrics", {})
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            mean_duration = metrics.get('mean_project_duration', 0)
+            st.metric("Mean Project Duration", f"{mean_duration:.1f} days")
+
+        with col2:
+            std_duration = metrics.get('std_project_duration', 0)
+            cv = metrics.get('cv_project_duration', 0)
+            st.metric("Standard Deviation", f"{std_duration:.1f} days",
+                      delta=f"CV: {cv:.2f}")
+
+        with col3:
+            prob_on_time = metrics.get('prob_on_time', 0)
+            st.metric("On-Time Probability", f"{prob_on_time:.1%}")
+
+        with col4:
+            var_95 = metrics.get('var_95', 0)
+            st.metric("95% VaR", f"{var_95:.1f} days")
+
+    # Visualization Options
+    viz_option = st.selectbox(
+        "Choose Visualization",
+        ["Confidence Band Gantt", "Multiple Realizations", "Completion Time Distributions", "Risk Analysis"],
+        key="sde_viz_option"
+    )
+
+    if viz_option == "Confidence Band Gantt":
+        render_sde_confidence_gantt(sde_results, model.task_df)
+    elif viz_option == "Multiple Realizations":
+        render_sde_realizations(sde_results, model.task_df)
+    elif viz_option == "Completion Time Distributions":
+        render_sde_distributions(sde_results, model.task_df)
+    elif viz_option == "Risk Analysis":
+        render_sde_risk_analysis(sde_results, risk_summary)
+
+
+def render_sde_confidence_gantt(sde_results, task_df):
+    """Render Gantt chart with confidence bands"""
+
+    st.subheader("🎯 Confidence Band Gantt Chart")
+
+    n_tasks = len(task_df)
+    task_names = task_df["Task"].tolist()
+
+    # Calculate percentiles for completion times
+    completion_times = sde_results.completion_times
+    percentiles = [5, 25, 50, 75, 95]
+    completion_percentiles = np.percentile(completion_times, percentiles, axis=1)
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=(12, max(6, n_tasks * 0.6)))
+
+    colors = ['#ffcccc', '#ff9999', '#ff6666', '#ff9999', '#ffcccc']
+    labels = ['5-95%', '25-75%', '50% (Median)', '25-75%', '5-95%']
+
+    for i in range(n_tasks):
+        y_pos = n_tasks - i - 1
+
+        # Draw confidence bands
+        for j in range(len(percentiles) // 2):
+            left_perc = completion_percentiles[j, i]
+            right_perc = completion_percentiles[-(j + 1), i]
+            width = right_perc - left_perc
+
+            ax.barh(y_pos, width, left=left_perc, height=0.6,
+                    color=colors[j], alpha=0.7,
+                    label=labels[j] if i == 0 else "")
+
+        # Median line
+        median_time = completion_percentiles[2, i]
+        ax.axvline(x=median_time, ymin=(y_pos - 0.3) / (n_tasks), ymax=(y_pos + 0.3) / (n_tasks),
+                   color='red', linewidth=2)
+
+        # Task label
+        ax.text(median_time + 1, y_pos, f"{task_names[i]}",
+                va='center', fontsize=9, fontweight='bold')
+
+    ax.set_yticks(range(n_tasks))
+    ax.set_yticklabels([f"Task {i + 1}" for i in range(n_tasks)])
+    ax.set_xlabel("Time (days)")
+    ax.set_title("SDE Project Schedule with Confidence Bands")
+    ax.legend(loc='upper right')
+    ax.grid(True, alpha=0.3)
+
+    st.pyplot(fig, use_container_width=True)
+
+    # Show percentile table
+    st.subheader("📋 Completion Time Percentiles")
+    perc_df = pd.DataFrame(
+        completion_percentiles.T,
+        columns=[f"{p}%" for p in percentiles],
+        index=[f"{name}" for name in task_names]
+    )
+    perc_df = perc_df.round(1)
+    st.dataframe(perc_df, use_container_width=True)
+
+
+def render_sde_realizations(sde_results, task_df, n_show=10):
+    """Show multiple individual simulation paths"""
+
+    st.subheader("🎲 Individual Simulation Realizations")
+
+    n_show = st.slider("Number of paths to show", 1, 50, 10, 1)
+
+    n_tasks = len(task_df)
+    task_names = task_df["Task"].tolist()
+    completion_times = sde_results.completion_times
+
+    # Select random paths to show
+    selected_paths = np.random.choice(completion_times.shape[1], n_show, replace=False)
+
+    fig, ax = plt.subplots(figsize=(12, max(6, n_tasks * 0.6)))
+
+    colors = plt.cm.Set3(np.linspace(0, 1, n_show))
+
+    for path_idx, path in enumerate(selected_paths):
+        for i in range(n_tasks):
+            y_pos = n_tasks - i - 1
+            completion_time = completion_times[i, path]
+
+            # Simple bar for this realization
+            ax.barh(y_pos, completion_time, height=0.8 / n_show,
+                    left=path_idx * 0.8 / n_show - 0.4,  # Changed from 'bottom' to 'left'
+                    color=colors[path_idx], alpha=0.7,
+                    label=f"Path {path + 1}" if i == 0 else "")
+
+    # Add task names
+    for i in range(n_tasks):
+        y_pos = n_tasks - i - 1
+        ax.text(ax.get_xlim()[1] * 0.02, y_pos, task_names[i],
+                va='center', fontsize=9, fontweight='bold')
+
+    ax.set_yticks(range(n_tasks))
+    ax.set_yticklabels([f"Task {i + 1}" for i in range(n_tasks)])
+    ax.set_xlabel("Completion Time (days)")
+    ax.set_title(f"Individual SDE Simulation Paths (showing {n_show} of {completion_times.shape[1]})")
+
+    if n_show <= 10:
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+
+    st.pyplot(fig, use_container_width=True)
+
+
+def render_sde_distributions(sde_results, task_df):
+    """Show completion time distributions for each task"""
+
+    st.subheader("📈 Completion Time Distributions")
+
+    completion_times = sde_results.completion_times
+    project_times = sde_results.project_completion_times
+    task_names = task_df["Task"].tolist()
+
+    # Choose what to plot
+    plot_option = st.selectbox(
+        "Select distribution to view:",
+        ["Project Completion Time", "Individual Task Times", "All Tasks Overlay"]
+    )
+
+    if plot_option == "Project Completion Time":
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        ax.hist(project_times, bins=50, density=True, alpha=0.7, color='skyblue', edgecolor='black')
+
+        # Add statistics
+        mean_time = np.mean(project_times)
+        median_time = np.median(project_times)
+
+        ax.axvline(mean_time, color='red', linestyle='--', linewidth=2, label=f'Mean: {mean_time:.1f}')
+        ax.axvline(median_time, color='green', linestyle='--', linewidth=2, label=f'Median: {median_time:.1f}')
+
+        ax.set_xlabel("Project Completion Time (days)")
+        ax.set_ylabel("Density")
+        ax.set_title("Distribution of Project Completion Times")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+        st.pyplot(fig, use_container_width=True)
+
+    elif plot_option == "Individual Task Times":
+        # Select task to view
+        task_idx = st.selectbox("Select task:", range(len(task_names)),
+                                format_func=lambda x: f"Task {x + 1}: {task_names[x]}")
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        task_times = completion_times[task_idx, :]
+        ax.hist(task_times, bins=30, density=True, alpha=0.7, color='lightcoral', edgecolor='black')
+
+        mean_time = np.mean(task_times)
+        median_time = np.median(task_times)
+
+        ax.axvline(mean_time, color='red', linestyle='--', linewidth=2, label=f'Mean: {mean_time:.1f}')
+        ax.axvline(median_time, color='green', linestyle='--', linewidth=2, label=f'Median: {median_time:.1f}')
+
+        ax.set_xlabel("Completion Time (days)")
+        ax.set_ylabel("Density")
+        ax.set_title(f"Distribution: {task_names[task_idx]}")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+        st.pyplot(fig, use_container_width=True)
+
+    else:  # All Tasks Overlay
+        fig, ax = plt.subplots(figsize=(12, 8))
+
+        colors = plt.cm.tab10(np.linspace(0, 1, len(task_names)))
+
+        for i, (task_times, color) in enumerate(zip(completion_times, colors)):
+            ax.hist(task_times, bins=30, density=True, alpha=0.6,
+                    color=color, label=f"Task {i + 1}: {task_names[i]}")
+
+        ax.set_xlabel("Completion Time (days)")
+        ax.set_ylabel("Density")
+        ax.set_title("Completion Time Distributions - All Tasks")
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.grid(True, alpha=0.3)
+
+        st.pyplot(fig, use_container_width=True)
+
+
+def render_sde_risk_analysis(sde_results, risk_summary):
+    """Show detailed risk analysis from SDE results"""
+
+    st.subheader("⚠️ Risk Analysis Dashboard")
+
+    if not risk_summary:
+        st.warning("No risk summary available")
+        return
+
+    metrics = risk_summary.get("sde_metrics", {})
+    confidence_intervals = risk_summary.get("confidence_intervals", {})
+
+    # Risk Metrics Table
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("📊 Key Risk Metrics")
+
+        risk_data = {
+            "Metric": [
+                "Mean Project Duration",
+                "Standard Deviation",
+                "Coefficient of Variation",
+                "Schedule Risk Factor",
+                "95% Value at Risk",
+                "Expected Shortfall",
+                "Probability On-Time"
+            ],
+            "Value": [
+                f"{metrics.get('mean_project_duration', 0):.1f} days",
+                f"{metrics.get('std_project_duration', 0):.1f} days",
+                f"{metrics.get('cv_project_duration', 0):.3f}",
+                f"{metrics.get('schedule_risk_factor', 1):.2f}x",
+                f"{metrics.get('var_95', 0):.1f} days",
+                f"{metrics.get('expected_shortfall', 0):.1f} days",
+                f"{metrics.get('prob_on_time', 0):.1%}"
+            ]
+        }
+
+        st.dataframe(pd.DataFrame(risk_data), use_container_width=True)
+
+    with col2:
+        st.subheader("📈 Confidence Intervals")
+
+        # Show project completion confidence interval
+        project_ci = confidence_intervals.get('project_completion', (0, 0))
+
+        fig, ax = plt.subplots(figsize=(8, 4))
+
+        # Simple visualization of confidence interval
+        mean_val = metrics.get('mean_project_duration', 0)
+        lower, upper = project_ci
+
+        ax.errorbar([0], [mean_val], yerr=[[mean_val - lower], [upper - mean_val]],
+                    fmt='o', capsize=10, capthick=2, markersize=8, color='red')
+
+        ax.set_xlim(-0.5, 0.5)
+        ax.set_ylabel("Project Duration (days)")
+        ax.set_title("90% Confidence Interval")
+        ax.set_xticks([])
+        ax.grid(True, alpha=0.3)
+
+        # Add text annotations
+        ax.text(0.1, mean_val, f"Mean: {mean_val:.1f}", va='center')
+        ax.text(0.1, lower, f"5%: {lower:.1f}", va='center')
+        ax.text(0.1, upper, f"95%: {upper:.1f}", va='center')
+
+        st.pyplot(fig, use_container_width=True)
+
+    # Simulation Parameters
+    st.subheader("⚙️ Simulation Parameters Used")
+    sim_params = risk_summary.get("simulation_params", {})
+
+    param_cols = st.columns(3)
+    with param_cols[0]:
+        st.metric("Number of Paths", sim_params.get('n_paths', 'N/A'))
+    with param_cols[1]:
+        st.metric("Volatility", f"{sim_params.get('volatility', 0):.3f}")
+    with param_cols[2]:
+        st.metric("Correlation Strength", f"{sim_params.get('correlation_strength', 0):.2f}")
