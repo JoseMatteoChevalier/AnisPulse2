@@ -2,7 +2,7 @@
   {
     "id": 1,
     "name": "Requirements Analysis",
-    "duration": 10.0,
+    "duration": 14.0,
     "dependencies": [],
     "risk_level": 0.5,
     "parent_id": null
@@ -10,7 +10,7 @@
   {
     "id": 2,
     "name": "Database Design",
-    "duration": 15.0,
+    "duration": 21.0,
     "dependencies": [
       1
     ],
@@ -20,7 +20,7 @@
   {
     "id": 3,
     "name": "Backend API Development",
-    "duration": 20.0,
+    "duration": 28.0,
     "dependencies": [
       2
     ],
@@ -30,7 +30,7 @@
   {
     "id": 4,
     "name": "Third-party Integration",
-    "duration": 12.0,
+    "duration": 21.0,
     "dependencies": [
       3
     ],
@@ -40,7 +40,7 @@
   {
     "id": 5,
     "name": "Frontend UI Development",
-    "duration": 18.0,
+    "duration": 35.0,
     "dependencies": [
       2
     ],
@@ -50,7 +50,7 @@
   {
     "id": 6,
     "name": "Testing & Deployment",
-    "duration": 8.0,
+    "duration": 14.0,
     "dependencies": [
       4,
       5
