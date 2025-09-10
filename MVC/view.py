@@ -409,7 +409,8 @@ def render_simulation_results(model):
     # --- 2D Plot ---
     with col1:
         st.subheader("2D Completion Plot")
-        fig, ax = plt.subplots(figsize=(6, 4), facecolor='#fff')
+        # OPTION 2: Use consistent figsize that works well for both
+        fig, ax = plt.subplots(figsize=(8, 6), facecolor='#fff')
         # Blue Classical curve (SOLID)
         ax.plot(simulation_time, classical_risk, color="#1976d2", lw=2, label="Classical Risk")
         # Red PDE curve (DOTTED)
@@ -425,22 +426,26 @@ def render_simulation_results(model):
     # --- 3D Plot ---
     with col2:
         st.subheader("3D Completion Plot")
-        fig_3d = plt.figure(figsize=(6, 4), facecolor='#fff')
+        # OPTION 2: Same figsize for consistency
+        fig_3d = plt.figure(figsize=(8, 6), facecolor='#fff')
         ax_3d = fig_3d.add_subplot(111, projection='3d')
+
         # Blue Classical (SOLID)
         ax_3d.plot(simulation_time, [0] * len(simulation_time), classical_risk, color="#1976d2", lw=2,
                    label="Classical Risk")
         # Red PDE (DOTTED)
         ax_3d.plot(simulation_time, [1] * len(simulation_time), risk_curve, color="#d32f2f", lw=2, linestyle='--',
                    label="Diffusion Risk")
+
         ax_3d.set_xlabel("Time (days)")
         ax_3d.set_ylabel("Model (0=Classical,1=Diffusion)")
         ax_3d.set_zlabel("Average Completion (0–1)")
         ax_3d.set_title("3D Completion: Classical vs Diffusion")
         ax_3d.legend()
-        st.pyplot(fig_3d, use_container_width=True)
 
-# -------------------------------
+        # Better 3D layout
+        fig_3d.tight_layout()
+        st.pyplot(fig_3d, use_container_width=True)# -------------------------------
 # Dependency Tab
 # -------------------------------
 def render_dependency_tab(model):
@@ -945,9 +950,48 @@ def render_eigenvalue_tab(model):
 # PDE Gantt Tab with Critical Path
 # -------------------------------
 def render_pde_gantt(model):
+    # DEFENSIVE VALIDATION - Add at the beginning
+    print(f"PDE Gantt called with {len(model.task_df)} tasks")
+
     if not model.simulation_data.get("tasks"):
         st.info("Run the simulation to view the PDE Gantt chart.")
+        print("No PDE simulation data found")
         return
+
+        # Get arrays and validate they exist
+    start_times = model.simulation_data.get("start_times_risk")
+    finish_times = model.simulation_data.get("finish_times_risk")
+    durations_risk = model.simulation_data.get("durations_risk")
+
+    if start_times is None:
+        st.error("PDE start times missing. Run simulation first.")
+        print("No PDE start times found")
+        return
+
+    if finish_times is None:
+        st.error("PDE finish times missing. Run simulation first.")
+        print("No PDE finish times found")
+        return
+
+    if durations_risk is None:
+        st.error("PDE durations missing. Run simulation first.")
+        print("No PDE durations found")
+        return
+
+    print(f"PDE arrays: start_times={len(start_times)}, finish_times={len(finish_times)}, durations={len(durations_risk)}")
+
+        # Validate array sizes match task count
+    if len(start_times) != len(model.task_df):
+            st.error(f"Data mismatch detected: {len(model.task_df)} tasks but {len(start_times)} PDE start times. Please re-run simulation.")
+            print(f"MISMATCH: {len(model.task_df)} tasks vs {len(start_times)} PDE start times")
+            return
+
+    if len(finish_times) != len(model.task_df):
+            st.error(f"Data mismatch detected: {len(model.task_df)} tasks but {len(finish_times)} PDE finish times. Please re-run simulation.")
+            print(f"MISMATCH: {len(model.task_df)} tasks vs {len(finish_times)} PDE finish times")
+            return
+
+    print("PDE Gantt validation passed")
 
     task_df = model.task_df.copy()
     tasks = model.simulation_data["tasks"]
@@ -1047,12 +1091,18 @@ def render_eigenvalue_tab(model):
 def render_sde_gantt(model, controller):
     """Render SDE Gantt chart with multiple realizations and confidence bands"""
 
-    st.subheader("📊 SDE Stochastic Simulation")
+    st.subheader("🌊 SDE Stochastic Simulation")
 
-    # Check if we have SDE results
+    # Check if we have SDE results - look for the sde_results key directly
     sde_results = model.simulation_data.get("sde_results")
 
-    if sde_results is None:
+    # Also check for SDE-specific data keys
+    has_sde_data = (
+            model.simulation_data.get("sde_start_times") is not None and
+            model.simulation_data.get("sde_finish_times") is not None
+    )
+
+    if sde_results is None or not has_sde_data:
         st.info("Run SDE simulation to view stochastic Gantt chart with confidence bands.")
 
         # SDE Parameter Controls
@@ -1060,7 +1110,7 @@ def render_sde_gantt(model, controller):
             col1, col2, col3 = st.columns(3)
 
             with col1:
-                n_paths = st.slider("Number of Paths", 100, 2000, 1000, 100,
+                n_paths = st.slider("Number of Paths", 50, 1000, 500, 50,
                                     help="More paths = better statistics but slower computation")
                 volatility = st.slider("Volatility", 0.05, 0.5, 0.15, 0.05,
                                        help="Base uncertainty level for all tasks")
@@ -1106,13 +1156,26 @@ def render_sde_gantt(model, controller):
 
                 if success:
                     st.success("SDE simulation completed successfully!")
+                    # Debug: Show what data is actually stored
+                    st.write("🔍 Debug: Data stored in simulation_data:")
+                    sde_keys = [k for k in model.simulation_data.keys() if 'sde' in k.lower()]
+                    st.write(f"SDE keys found: {sde_keys}")
                     st.rerun()
                 else:
                     st.error(f"SDE simulation failed: {error}")
         return
 
+    # Use SDE-specific data from the new storage format
+    start_times = model.simulation_data.get("sde_start_times")
+    finish_times = model.simulation_data.get("sde_finish_times")
+    durations = model.simulation_data.get("sde_durations")
+
     # Display SDE Results
     st.success("✅ SDE Simulation Results Available")
+
+    # Debug info to confirm data availability
+    st.write(f"🔍 Debug: SDE data shapes - start_times: {start_times.shape if start_times is not None else 'None'}")
+    st.write(f"🔍 Debug: SDE data shapes - finish_times: {finish_times.shape if finish_times is not None else 'None'}")
 
     # Risk Summary Metrics
     risk_summary = controller.get_sde_risk_summary()
@@ -1155,6 +1218,21 @@ def render_sde_gantt(model, controller):
     elif viz_option == "Risk Analysis":
         render_sde_risk_analysis(sde_results, risk_summary)
 
+
+# TEMPORARY DEBUG FUNCTION - Add this to your view.py temporarily
+def debug_simulation_data_keys(model):
+    """Temporary debug function to see all simulation data keys"""
+    st.write("🔍 **DEBUG: All simulation_data keys:**")
+    for key, value in model.simulation_data.items():
+        if value is not None:
+            if hasattr(value, 'shape'):
+                st.write(f"✅ {key}: {type(value).__name__} shape {value.shape}")
+            elif hasattr(value, '__len__'):
+                st.write(f"✅ {key}: {type(value).__name__} length {len(value)}")
+            else:
+                st.write(f"✅ {key}: {type(value).__name__}")
+        else:
+            st.write(f"❌ {key}: None")
 
 def render_sde_confidence_gantt(sde_results, task_df):
     """Render Gantt chart with confidence bands"""

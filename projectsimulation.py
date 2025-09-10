@@ -149,3 +149,176 @@ risk_completion = T * np.argmax(risk_curve>=1)/steps
 print(f"Baseline completion time: {baseline_completion:.2f} weeks")
 print(f"Risk-weighted completion time: {risk_completion:.2f} weeks")
 
+# !/usr/bin/env python3
+"""
+Simple standalone script to compare matplotlib vs plotly
+Run this independently to see the difference
+"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# Generate some sample project data
+np.random.seed(42)
+time_days = np.arange(0, 100, 1)
+classical_completion = np.minimum(time_days / 80, 1.0)  # Linear completion
+pde_completion = 1 - np.exp(-time_days / 30)  # Exponential approach to 1
+monte_carlo_results = np.random.gamma(2, 40, 1000)  # Project completion times
+
+print("=== MATPLOTLIB EXAMPLES (what you currently use) ===")
+
+# Example 1: Line plot (like your simulation results)
+plt.figure(figsize=(10, 6))
+plt.subplot(2, 2, 1)
+plt.plot(time_days, classical_completion, 'b-', label='Classical', linewidth=2)
+plt.plot(time_days, pde_completion, 'r--', label='PDE', linewidth=2)
+plt.xlabel('Time (days)')
+plt.ylabel('Completion %')
+plt.title('Matplotlib: Project Completion')
+plt.legend()
+plt.grid(True)
+
+# Example 2: Histogram (Monte Carlo results)
+plt.subplot(2, 2, 2)
+plt.hist(monte_carlo_results, bins=30, alpha=0.7, color='skyblue', edgecolor='black')
+plt.axvline(np.mean(monte_carlo_results), color='red', linestyle='--',
+            label=f'Mean: {np.mean(monte_carlo_results):.1f}')
+plt.xlabel('Project Duration (days)')
+plt.ylabel('Frequency')
+plt.title('Matplotlib: Monte Carlo Results')
+plt.legend()
+
+# Example 3: Simple Gantt chart (like yours)
+tasks = ['Task 1', 'Task 2', 'Task 3', 'Task 4']
+start_times = [0, 10, 20, 35]
+durations = [15, 20, 25, 10]
+
+plt.subplot(2, 2, 3)
+for i, (task, start, duration) in enumerate(zip(tasks, start_times, durations)):
+    plt.barh(i, duration, left=start, height=0.6,
+             alpha=0.8, color=plt.cm.Set3(i / len(tasks)))
+    plt.text(start + duration / 2, i, f'{task}\n({duration}d)',
+             ha='center', va='center', fontsize=8)
+
+plt.yticks(range(len(tasks)), tasks)
+plt.xlabel('Time (days)')
+plt.title('Matplotlib: Gantt Chart')
+plt.grid(True, alpha=0.3)
+
+# Example 4: 3D plot (like your comparison)
+ax = plt.subplot(2, 2, 4, projection='3d')
+ax.plot(time_days, [0] * len(time_days), classical_completion, 'b-', label='Classical', linewidth=2)
+ax.plot(time_days, [1] * len(time_days), pde_completion, 'r-', label='PDE', linewidth=2)
+ax.set_xlabel('Time')
+ax.set_ylabel('Model')
+ax.set_zlabel('Completion')
+ax.set_title('Matplotlib: 3D Comparison')
+ax.legend()
+
+plt.tight_layout()
+plt.show()
+
+print("\n=== PLOTLY EXAMPLES (interactive alternative) ===")
+
+try:
+    import plotly.graph_objects as go
+    import plotly.express as px
+    from plotly.subplots import make_subplots
+
+    # Example 1: Interactive line plot
+    fig1 = go.Figure()
+    fig1.add_trace(go.Scatter(x=time_days, y=classical_completion,
+                              mode='lines', name='Classical',
+                              hovertemplate='Day %{x}<br>Completion: %{y:.1%}<extra></extra>'))
+    fig1.add_trace(go.Scatter(x=time_days, y=pde_completion,
+                              mode='lines', name='PDE', line=dict(dash='dash'),
+                              hovertemplate='Day %{x}<br>Completion: %{y:.1%}<extra></extra>'))
+    fig1.update_layout(title='Plotly: Interactive Project Completion',
+                       xaxis_title='Time (days)', yaxis_title='Completion %')
+    fig1.show()
+
+    # Example 2: Interactive histogram with statistics
+    fig2 = go.Figure()
+    fig2.add_trace(go.Histogram(x=monte_carlo_results, nbinsx=30, name='Results',
+                                hovertemplate='Duration: %{x:.1f}<br>Count: %{y}<extra></extra>'))
+
+    # Add mean line
+    mean_val = np.mean(monte_carlo_results)
+    fig2.add_vline(x=mean_val, line_dash="dash", line_color="red",
+                   annotation_text=f"Mean: {mean_val:.1f} days")
+
+    # Add percentiles
+    p95 = np.percentile(monte_carlo_results, 95)
+    fig2.add_vline(x=p95, line_dash="dot", line_color="orange",
+                   annotation_text=f"95%: {p95:.1f} days")
+
+    fig2.update_layout(title='Plotly: Interactive Monte Carlo Results',
+                       xaxis_title='Project Duration (days)', yaxis_title='Frequency')
+    fig2.show()
+
+    # Example 3: Interactive Gantt-style chart
+    fig3 = go.Figure()
+
+    colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4']
+    for i, (task, start, duration) in enumerate(zip(tasks, start_times, durations)):
+        fig3.add_trace(go.Scatter(
+            x=[start, start + duration, start + duration, start, start],
+            y=[i - 0.3, i - 0.3, i + 0.3, i + 0.3, i - 0.3],
+            fill='toself',
+            fillcolor=colors[i],
+            line=dict(color=colors[i]),
+            name=task,
+            hovertemplate=f'{task}<br>Start: Day %{{x}}<br>Duration: {duration} days<extra></extra>'
+        ))
+
+    fig3.update_layout(
+        title='Plotly: Interactive Gantt Chart',
+        xaxis_title='Time (days)',
+        yaxis=dict(tickmode='array', tickvals=list(range(len(tasks))), ticktext=tasks),
+        showlegend=True
+    )
+    fig3.show()
+
+    # Example 4: Interactive 3D
+    fig4 = go.Figure()
+
+    fig4.add_trace(go.Scatter3d(
+        x=time_days, y=[0] * len(time_days), z=classical_completion,
+        mode='lines', name='Classical',
+        line=dict(color='blue', width=6),
+        hovertemplate='Day %{x}<br>Classical: %{z:.1%}<extra></extra>'
+    ))
+
+    fig4.add_trace(go.Scatter3d(
+        x=time_days, y=[1] * len(time_days), z=pde_completion,
+        mode='lines', name='PDE',
+        line=dict(color='red', width=6),
+        hovertemplate='Day %{x}<br>PDE: %{z:.1%}<extra></extra>'
+    ))
+
+    fig4.update_layout(
+        title='Plotly: Interactive 3D Comparison',
+        scene=dict(
+            xaxis_title='Time (days)',
+            yaxis_title='Model Type',
+            zaxis_title='Completion %'
+        )
+    )
+    fig4.show()
+
+    print("✅ Plotly examples completed!")
+    print("📝 Key differences:")
+    print("   - Plotly: Interactive (zoom, pan, hover)")
+    print("   - Plotly: Professional look")
+    print("   - Plotly: Better statistics overlays")
+    print("   - Matplotlib: Lighter, simpler, what you already use")
+
+except ImportError:
+    print("❌ Plotly not installed. Install with: pip install plotly")
+    print("🔍 This shows why matplotlib might be better for your use case!")
+
+print(f"\n=== SUMMARY ===")
+print("Matplotlib pros: Lightweight, you already use it, simple")
+print("Plotly pros: Interactive, professional, better for exploration")
+print("For your Monte Carlo enhancement: Stick with matplotlib!")

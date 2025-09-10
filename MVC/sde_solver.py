@@ -630,6 +630,9 @@ class SDEModelIntegration:
         if self.sde_results is None:
             return
 
+        # Store SDE results in their own namespace - DON'T overwrite PDE data
+        self.model.simulation_data["sde_results"] = self.sde_results
+
         # Use mean path for compatibility with existing UI
         mean_progress = np.mean(self.sde_results.task_paths, axis=1)
         n_tasks, n_steps = mean_progress.shape
@@ -637,7 +640,7 @@ class SDEModelIntegration:
         # Calculate proper start times based on dependencies
         adjacency, _ = self.model.build_adjacency()
         start_times = np.zeros(n_tasks)
-        mean_completion_times = np.mean(self.sde_results.completion_times, axis=1)
+        mean_completion_times = np.mean(self.sde_results.completion_times, axis=1)  # Fixed variable name
 
         # Forward pass to calculate start times
         for i in range(n_tasks):
@@ -645,19 +648,30 @@ class SDEModelIntegration:
             if len(predecessors) > 0:
                 start_times[i] = np.max(mean_completion_times[predecessors])
 
-        # Update simulation_data structure
-        self.model.simulation_data.update({
-            "tasks": self.model.task_df["Task"].tolist(),
-            "adjacency": adjacency,
-            "u_matrix": mean_progress,
-            "num_tasks": n_tasks,
-            "start_times_risk": start_times,
-            "finish_times_risk": mean_completion_times,
-            "durations_risk": mean_completion_times - start_times,
-            "simulation_time": self.sde_results.time_grid,
-            "risk_curve": np.mean(mean_progress, axis=0),
+        # Store SDE results in SEPARATE keys to preserve original PDE data
+        sde_specific_data = {
+            "sde_u_matrix": mean_progress,
+            "sde_start_times": start_times,
+            "sde_finish_times": mean_completion_times,
+            "sde_durations": mean_completion_times - start_times,
+            "sde_simulation_time": self.sde_results.time_grid,
+            "sde_risk_curve": np.mean(mean_progress, axis=0),
             "sde_results": self.sde_results  # Store full SDE results
-        })
+        }
+
+        # Add SDE data without overwriting PDE/Classical data
+        self.model.simulation_data.update(sde_specific_data)
+
+        # Only update core fields if they don't exist (preserve PDE data)
+        if self.model.simulation_data.get("tasks") is None:
+            self.model.simulation_data["tasks"] = self.model.task_df["Task"].tolist()
+        if self.model.simulation_data.get("adjacency") is None:
+            self.model.simulation_data["adjacency"] = adjacency
+        if self.model.simulation_data.get("num_tasks") is None:
+            self.model.simulation_data["num_tasks"] = n_tasks
+
+        print("✅ SDE results stored without overwriting PDE/Classical data")
+
 
     def get_risk_summary(self) -> Dict[str, Any]:
         """Get comprehensive risk summary from SDE results"""

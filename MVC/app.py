@@ -140,6 +140,46 @@ def main():
 
     # Tab 2: Basic Schedule (NEW - MOST IMPORTANT)
     with tabs[1]:
+        with st.expander("ℹ️ About Basic Schedule Analysis", expanded=False):
+            st.markdown("""
+               **What Basic Schedule Does:**
+               - Creates a pure dependency-based project schedule using task durations and precedence relationships
+               - Calculates the critical path - the sequence of tasks that determines minimum project duration
+               - Shows task float (slack time) - how much tasks can be delayed without affecting the project
+               - Provides the baseline foundation for all other advanced analyses
+
+               **This is Your Project's Foundation:**
+               - **No risk modeling** - uses task durations exactly as entered
+               - **No uncertainty** - assumes everything goes according to plan
+               - **Pure logic** - only considers task dependencies and durations
+               - **Industry standard** - follows traditional Critical Path Method (CPM)
+
+               **Key Concepts Explained:**
+               - **Critical Path (Red tasks):** Chain of tasks with zero float - any delay here delays the entire project
+               - **Float/Slack (Gray bars):** Extra time available before a task becomes critical
+               - **Early Start:** Earliest possible start time based on predecessor completion
+               - **Late Start:** Latest start time without delaying the project
+               - **Total Duration:** Sum of critical path task durations
+
+               **How to Read the Results:**
+               - **Critical Path Tasks:** Focus management attention here - zero tolerance for delays
+               - **Float Time:** Tasks with float can be delayed without project impact
+               - **Project Duration:** Minimum time needed if everything goes perfectly
+               - **Task Dependencies:** Arrows show which tasks must finish before others can start
+
+               **When to Use Basic Schedule:**
+               - **Project planning baseline** - start here before adding risk analysis
+               - **Stakeholder communication** - simple, clear timeline without complexity
+               - **Resource planning** - understand task sequencing and timing
+               - **Comparison baseline** - see how risk affects your "perfect world" schedule
+
+               **💡 Pro Tips:**
+               - Critical path tasks need the most attention and resources
+               - Tasks with high float can be resource-leveled or delayed if needed
+               - This schedule assumes no risks - compare with advanced methods to see uncertainty impact
+               - Use this as your "best case scenario" for stakeholder discussions
+               """)
+
         render_basic_schedule_tab(model)
 
         # Add export functionality
@@ -176,6 +216,47 @@ def main():
     # Tab 5: Monte Carlo Gantt
     with tabs[4]:
         st.subheader("🎲 Monte Carlo Gantt Chart")
+
+        # ADD THIS DOCUMENTATION SECTION
+        with st.expander("ℹ️ About Monte Carlo Analysis", expanded=False):
+            st.markdown("""
+                **What Monte Carlo Analysis Does:**
+                - Runs thousands of simulations with varying task durations based on risk levels
+                - Shows the range of possible project outcomes and completion times
+                - Identifies which tasks are most likely to cause project delays (criticality analysis)
+                - Provides confidence intervals for project planning and risk management
+
+                **When to Use Monte Carlo:**
+                - When you need probabilistic project estimates instead of single-point forecasts
+                - For risk-aware project planning and stakeholder communication
+                - To identify the most critical tasks that require extra attention
+                - When project uncertainty is high and you need confidence bounds
+
+                **Parameter Guide:**
+                - **Number of Simulations:** 
+                  - 1,000: Fast, good for initial analysis
+                  - 5,000: Better statistics, recommended for most projects
+                  - 10,000: High precision, use for critical/high-stakes projects
+                - **Confidence Levels:** 
+                  - 80%: Basic planning scenarios
+                  - 90%: Standard project management (recommended)
+                  - 95%: High-stakes or critical projects
+
+                **Understanding Your Results:**
+                - **Criticality %:** Percentage of simulations where each task was on the critical path
+                  - >80%: High risk tasks - monitor closely and plan contingencies
+                  - 50-80%: Medium risk tasks - watch for delays
+                  - <50%: Lower risk tasks - standard monitoring
+                - **Mean Completion:** Best estimate for project completion time
+                - **Confidence Bands:** Range of likely completion times (gray area in charts)
+                - **Percentiles:** P90 means 90% of simulations finished by that time
+
+                **💡 Pro Tips:**
+                - Focus management attention on tasks with >50% criticality
+                - Use P90 completion time for stakeholder commitments
+                - Compare with Classical duration to see impact of uncertainty
+                - Higher risk levels (0-5) create wider completion time distributions
+                """)
 
         if not model.simulation_data.get("monte_carlo_results"):
             # Parameters section
@@ -289,7 +370,64 @@ def main():
     # Tab 6: SDE Gantt
     with tabs[5]:
         st.subheader("📊 SDE Gantt Chart")
+        # ADD THIS DOCUMENTATION SECTION
+        with st.expander("ℹ️ About Stochastic Differential Equations (SDE)", expanded=False):
+            st.markdown("""
+                **What SDE Analysis Does:**
+                - Models project progress as continuous stochastic processes over time
+                - Captures risk propagation and dependencies between connected tasks
+                - Shows multiple possible project paths with uncertainty bands
+                - Provides advanced risk quantification beyond simple Monte Carlo
 
+                **When to Use SDE:**
+                - For complex projects with significant task interdependencies
+                - When risks can cascade through connected tasks (contagion effects)
+                - For sophisticated uncertainty modeling and risk analysis
+                - When continuous-time modeling is more appropriate than discrete events
+
+                **Key Differences from Monte Carlo:**
+                - **Continuous:** Models progress smoothly over time vs. discrete outcomes
+                - **Path-dependent:** Each simulation path influences future progress
+                - **Risk propagation:** Delays in one task affect connected downstream tasks
+                - **Advanced statistics:** Provides sophisticated risk metrics and analysis
+
+                **Parameter Guide:**
+                - **Number of Paths:** 
+                  - 500: Fast computation, good for testing
+                  - 1000: Recommended for most analyses
+                  - 2000: High precision for critical projects
+                - **Volatility (0.05-0.5):** 
+                  - 0.1: Low uncertainty environment
+                  - 0.15: Typical uncertainty (recommended start)
+                  - 0.3+: High uncertainty/volatile environment
+                - **Dependency Correlation (0-1):** 
+                  - 0.3: Weak correlation between connected tasks
+                  - 0.5: Moderate correlation (recommended)
+                  - 0.8: Strong correlation - delays spread easily
+                - **Jump Intensity:** Rate of sudden disruptions (0.1 = 10% chance per time unit)
+                - **Risk Amplification:** How much task risk levels affect uncertainty
+
+                **Understanding SDE Results:**
+                - **Confidence Bands:** Show range of possible completion times
+                - **Multiple Realizations:** Individual simulation paths showing different scenarios
+                - **Distribution Plots:** Statistical analysis of completion time uncertainty
+                - **Risk Metrics:** 
+                  - VaR (Value at Risk): Worst-case scenarios at confidence levels
+                  - Expected Shortfall: Average of worst-case outcomes
+                  - Probability on-time: Chance of meeting original schedule
+
+                **Advanced Features:**
+                - **Path Exploration:** See individual simulation trajectories
+                - **Risk Surface Analysis:** Understand parameter sensitivity
+                - **Confidence Band Visualization:** Interactive exploration of uncertainty
+
+                **💡 Pro Tips:**
+                - Start with default parameters, then adjust based on your project characteristics
+                - Higher volatility = wider uncertainty bands
+                - Use correlation to model how tightly connected your tasks really are
+                - Compare results with Monte Carlo to understand the difference
+                - Focus on VaR metrics for stakeholder risk communication
+                """)
         from view import render_sde_gantt
         render_sde_gantt(model, controller)
 
@@ -297,6 +435,68 @@ def main():
 
     # Tab 7: Simulation Results (update index)
     with tabs[6]:
+        with st.expander("ℹ️ Understanding Simulation Comparisons", expanded=False):
+            st.markdown("""
+            **What This Comparison Shows:**
+            - **Classical Risk (Blue line):** Project completion over time with risk factors applied to task durations
+            - **Diffusion Risk (Red dashed line):** Advanced PDE modeling showing how risks propagate through task dependencies
+            - **Side-by-side analysis:** See how different modeling approaches affect project predictions
+
+            **The Two Methods Explained:**
+
+            **Classical Risk Modeling:**
+            - Applies risk multipliers directly to task durations (Risk Level 0-5 increases duration)
+            - Tasks progress independently - no risk propagation between connected tasks
+            - Deterministic approach - same inputs always give same results
+            - Industry standard method used in most project management tools
+
+            **PDE Diffusion Risk Modeling:**
+            - Models risk as a diffusion process that spreads through task dependencies
+            - Delays in high-risk tasks can cascade to connected downstream tasks
+            - Accounts for risk propagation and amplification effects
+            - Advanced mathematical modeling using partial differential equations
+
+            **Reading the Charts:**
+
+            **2D Plot (Left):**
+            - **X-axis:** Time progression (days)
+            - **Y-axis:** Average project completion (0 = start, 1 = complete)
+            - **Blue solid line:** Classical risk progression
+            - **Red dashed line:** PDE diffusion progression
+            - **Steeper curve:** Faster overall completion
+
+            **3D Plot (Right):**
+            - **Same data** shown in 3D perspective for visual clarity
+            - **Y-axis separation:** Classical (Y=0) vs PDE (Y=1) methods
+            - **Z-axis:** Completion percentage over time
+
+            **Key Insights to Look For:**
+            - **Gap between curves:** Shows impact of risk propagation effects
+            - **PDE curve typically slower:** Risk diffusion usually extends project duration
+            - **Similar curves:** Low-risk projects or weak task interdependencies
+            - **Large differences:** High-risk projects with strong dependencies benefit most from PDE modeling
+
+            **When Each Method is Most Appropriate:**
+
+            **Use Classical Risk When:**
+            - Simple projects with independent tasks
+            - Quick estimates needed for planning
+            - Stakeholders prefer traditional approaches
+            - Limited task interdependencies
+
+            **Use PDE Diffusion When:**
+            - Complex projects with significant task dependencies
+            - High-risk environment where delays cascade
+            - Advanced risk management needed
+            - Accuracy more important than simplicity
+
+            **💡 Interpretation Tips:**
+            - **Curves close together:** Risk propagation effects are minimal
+            - **PDE curve significantly delayed:** Strong interdependency effects present
+            - **Use PDE results** for complex project risk management
+            - **Use Classical results** for stakeholder communication and simple planning
+            - **Compare both** to understand the range of possible outcomes
+            """)
         render_simulation_results(model)
 
     # Tab 8: Dependencies (update index)
