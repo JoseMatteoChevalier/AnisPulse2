@@ -10,6 +10,7 @@ import matplotlib.patches as patches
 from sde_solver import SDEParameters
 import plotly.graph_objects as go
 
+
 #Gitcommitline#
 
 # -------------------------------
@@ -541,7 +542,26 @@ def render_simulation_results_plotly_test(model):
             st.error(f"Plotly error: {str(e)}")
     # Add some spacing
     st.markdown("---")
+    # DEBUG SECTION - Add this before the 3D comparison
+    st.write("🔍 **Debug Info for 3D Charts:**")
+    st.write(
+        f"Data arrays length: simulation_time={len(simulation_time)}, classical_risk={len(classical_risk)}, risk_curve={len(risk_curve)}")
+    st.write(f"Sample data - Time: {simulation_time[:3] if len(simulation_time) > 0 else 'Empty'}")
+    st.write(f"Sample data - Classical: {classical_risk[:3] if len(classical_risk) > 0 else 'Empty'}")
+    st.write(f"Sample data - Risk: {risk_curve[:3] if len(risk_curve) > 0 else 'Empty'}")
 
+    # Check for required imports
+    try:
+        from mpl_toolkits.mplot3d import Axes3D
+        st.write("✅ Matplotlib 3D import OK")
+    except ImportError:
+        st.error("❌ Missing: from mpl_toolkits.mplot3d import Axes3D")
+
+    try:
+        import plotly.graph_objects as go
+        st.write("✅ Plotly import OK")
+    except ImportError:
+        st.error("❌ Missing plotly import")
     # 3D COMPARISON SECTION
     st.subheader("📈 3D Chart Comparison: Matplotlib vs Plotly")
 
