@@ -1,0 +1,8 @@
+streamlit
+matplotlib
+numpy
+pandas
+seaborn
+plotly>=5.0.0
+scipy
+mplcursors

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.patches as patches
 from sde_solver import SDEParameters
-
+import plotly.graph_objects as go
 
 # -------------------------------
 # Sidebar
@@ -472,6 +472,71 @@ def render_dependency_tab(model):
     ax_dep.set_facecolor('#2a4066')
     st.pyplot(fig_dep, use_container_width=True)
 
+
+# Plotly Tests #
+
+# STEP 1: Create a new test function in view.py
+# ADD THIS to your view.py file (don't replace anything yet)
+
+def render_simulation_results_plotly_test(model):
+    """
+    TEST VERSION: Side-by-side comparison of matplotlib vs plotly
+    Only converts the 2D chart first for rigorous testing
+    """
+    if not model.simulation_data.get("tasks"):
+        st.info("Please run the simulation to view results.")
+        return
+
+    simulation_time = model.simulation_data.get("simulation_time", np.array([]))
+    risk_curve = model.simulation_data.get("risk_curve", np.array([]))
+    classical_risk = model.simulation_data.get("classical_risk", np.array([]))
+
+    # Safety check - SAME as original
+    if simulation_time is None or risk_curve is None or classical_risk is None:
+        st.info("Simulation data is incomplete. Cannot render results.")
+        return
+
+    # Make sure arrays match in length - SAME as original
+    min_len = min(len(simulation_time), len(risk_curve), len(classical_risk))
+    simulation_time = simulation_time[:min_len]
+    risk_curve = risk_curve[:min_len]
+    classical_risk = classical_risk[:min_len]
+
+    st.subheader("Simulation Results - Plotly Test")
+
+    # Show both versions for comparison
+    col1, col2 = st.columns(2)
+
+    # --- LEFT: Current Matplotlib Version ---
+    with col1:
+        st.subheader("Current (Matplotlib)")
+        fig, ax = plt.subplots(facecolor='#fff')
+        ax.plot(simulation_time, classical_risk, color="#1976d2", lw=2, label="Classical Risk")
+        ax.plot(simulation_time, risk_curve, color="#d32f2f", lw=2, linestyle="--", label="Diffusion Risk")
+        ax.set_xlabel("Time (days)")
+        ax.set_ylabel("Average Completion (0–1)")
+        ax.set_title("Completion: Classical vs Diffusion")
+        ax.legend()
+        ax.grid(True)
+        st.pyplot(fig, use_container_width=True)
+
+    # --- RIGHT: New Plotly Version ---
+    with col2:
+        st.subheader("New (Plotly)")
+
+        try:
+            import plotly.graph_objects as go
+
+            # Create plotly figure
+
+
+            fig_plotly = create_professional_plotly_chart(simulation_time, classical_risk, risk_curve)
+            st.plotly_chart(fig_plotly, use_container_width=True)
+
+        except ImportError:
+            st.error("Plotly not available. Run: pip install plotly")
+        except Exception as e:
+            st.error(f"Plotly error: {str(e)}")
 
 # -------------------------------
 # Critical Path Helper
@@ -1498,3 +1563,86 @@ def render_sde_risk_analysis(sde_results, risk_summary):
         st.metric("Volatility", f"{sim_params.get('volatility', 0):.3f}")
     with param_cols[2]:
         st.metric("Correlation Strength", f"{sim_params.get('correlation_strength', 0):.2f}")
+
+
+# Plot_Plotly#Function
+
+def create_professional_plotly_chart(simulation_time, classical_risk, risk_curve):
+    """Clean professional version with perfect spacing"""
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=simulation_time,
+        y=classical_risk,
+        mode='lines',
+        name='Classical Risk',
+        line=dict(color='#1976d2', width=3),
+        hovertemplate='Time: %{x:.1f} days<br>Classical: %{y:.1%}<extra></extra>'
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=simulation_time,
+        y=risk_curve,
+        mode='lines',
+        name='Diffusion Risk',
+        line=dict(color='#d32f2f', width=3, dash='dash'),
+        hovertemplate='Time: %{x:.1f} days<br>Diffusion: %{y:.1%}<extra></extra>'
+    ))
+
+    # CLEAN LAYOUT - no overlaps
+    fig.update_layout(
+        title=dict(
+            text="<b>Completion: Classical vs Diffusion</b>",
+            font=dict(size=18, family="Arial"),
+            x=0.5,
+            y=0.95
+        ),
+        xaxis_title="<b>Time (days)</b>",
+        yaxis_title="<b>Average Completion</b>",
+
+        height=500,  # Taller for better proportions
+        margin=dict(l=80, r=80, t=100, b=100),  # Generous margins
+
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+
+        # Legend with perfect spacing
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,  # Just above the plot area
+            xanchor="center",
+            x=0.5,
+            font=dict(size=12),
+            bgcolor="rgba(255,255,255,0.95)",
+            bordercolor="rgba(150,150,150,0.3)",
+            borderwidth=1
+        ),
+
+        # Professional axes
+        xaxis=dict(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(200,200,200,0.3)',
+            showline=True,
+            linewidth=1,
+            linecolor='rgba(150,150,150,0.8)'
+        ),
+        yaxis=dict(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(200,200,200,0.3)',
+            showline=True,
+            linewidth=1,
+            linecolor='rgba(150,150,150,0.8)',
+            tickformat='.0%'  # Shows as percentages: 0%, 20%, 40%, etc.
+        )
+    )
+
+    return fig
+
+
+# Then REPLACE the plotly section in your test function with this:
+# In render_simulation_results_plotly_test(), replace the plotly section:
+
+

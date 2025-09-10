@@ -15,6 +15,7 @@ from view import (
     render_editor_tab,
     render_basic_schedule_tab,  # NEW IMPORT
     render_simulation_results,
+    render_simulation_results_plotly_test,
     render_dependency_tab,
     render_classical_gantt,
     render_pde_gantt,
@@ -497,7 +498,7 @@ def main():
             - **Use Classical results** for stakeholder communication and simple planning
             - **Compare both** to understand the range of possible outcomes
             """)
-        render_simulation_results(model)
+        render_simulation_results_plotly_test(model)
 
     # Tab 8: Dependencies (update index)
     with tabs[7]:
