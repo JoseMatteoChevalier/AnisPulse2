@@ -539,6 +539,111 @@ def render_simulation_results_plotly_test(model):
             st.error("Plotly not available. Run: pip install plotly")
         except Exception as e:
             st.error(f"Plotly error: {str(e)}")
+    # Add some spacing
+    st.markdown("---")
+
+    # 3D COMPARISON SECTION
+    st.subheader("📈 3D Chart Comparison: Matplotlib vs Plotly")
+
+    # Create two columns for 3D side-by-side comparison
+    col3, col4 = st.columns(2)
+
+    # LEFT COLUMN: Original matplotlib 3D version
+    with col3:
+        st.write("**Current: Matplotlib 3D**")
+        fig_3d = plt.figure(figsize=(8, 6), facecolor='#fff')
+        ax_3d = fig_3d.add_subplot(111, projection='3d')
+
+        # Blue Classical (SOLID) - your existing code
+        ax_3d.plot(simulation_time, [0] * len(simulation_time), classical_risk,
+                   color="#1976d2", lw=2, label="Classical Risk")
+        # Red PDE (DOTTED) - your existing code
+        ax_3d.plot(simulation_time, [1] * len(simulation_time), risk_curve,
+                   color="#d32f2f", lw=2, linestyle='--', label="Diffusion Risk")
+
+        ax_3d.set_xlabel("Time (days)")
+        ax_3d.set_ylabel("Model (0=Classical,1=Diffusion)")
+        ax_3d.set_zlabel("Average Completion (0—1)")
+        ax_3d.set_title("3D Completion: Classical vs Diffusion")
+        ax_3d.legend()
+
+        # Better 3D layout - your existing code
+        fig_3d.tight_layout()
+        st.pyplot(fig_3d, use_container_width=True)
+
+    # RIGHT COLUMN: New plotly 3D version
+    with col4:
+        st.write("**New: Plotly Interactive 3D**")
+
+        # Create plotly 3D figure
+        fig_3d_plotly = go.Figure()
+
+        # Add Classical Risk line (solid blue) at Y=0
+        fig_3d_plotly.add_trace(go.Scatter3d(
+            x=simulation_time,
+            y=[0] * len(simulation_time),  # Classical model at Y=0
+            z=classical_risk,
+            mode='lines',
+            name='Classical Risk',
+            line=dict(color='#1976d2', width=6),
+            hovertemplate='<b>Classical Risk</b><br>' +
+                          'Time: %{x:.1f} days<br>' +
+                          'Model: Classical<br>' +
+                          'Completion: %{z:.3f}<br>' +
+                          '<extra></extra>'
+        ))
+
+        # Add PDE Risk line (red) at Y=1
+        fig_3d_plotly.add_trace(go.Scatter3d(
+            x=simulation_time,
+            y=[1] * len(simulation_time),  # Diffusion model at Y=1
+            z=risk_curve,
+            mode='lines',
+            name='Diffusion Risk',
+            line=dict(color='#d32f2f', width=6),
+            hovertemplate='<b>Diffusion Risk</b><br>' +
+                          'Time: %{x:.1f} days<br>' +
+                          'Model: Diffusion<br>' +
+                          'Completion: %{z:.3f}<br>' +
+                          '<extra></extra>'
+        ))
+
+        # Update 3D layout
+        fig_3d_plotly.update_layout(
+            title='3D Completion: Classical vs Diffusion',
+            font=dict(size=12),
+            showlegend=True,
+            height=500,
+            margin=dict(l=20, r=20, t=60, b=20),
+            scene=dict(
+                xaxis_title='Time (days)',
+                yaxis_title='Model (0=Classical, 1=Diffusion)',
+                zaxis_title='Average Completion (0—1)',
+                camera=dict(
+                    eye=dict(x=1.5, y=1.5, z=1.5)  # Nice viewing angle
+                ),
+                bgcolor='white'
+            )
+        )
+
+        st.plotly_chart(fig_3d_plotly, use_container_width=True)
+
+    # Add 3D-specific comparison notes
+    st.write("**🔍 3D Chart Differences:**")
+    col_c, col_d = st.columns(2)
+    with col_c:
+        st.write("**Matplotlib 3D:**")
+        st.write("- Static 3D view")
+        st.write("- Fixed camera angle")
+        st.write("- Limited interaction")
+
+    with col_d:
+        st.write("**Plotly 3D:**")
+        st.write("- **Rotate, zoom, pan** with mouse")
+        st.write("- **Interactive tooltips** in 3D space")
+        st.write("- **Reset camera** button")
+        st.write("- **Professional 3D styling**")
+
 
 # -------------------------------
 # Critical Path Helper
