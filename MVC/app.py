@@ -1,6 +1,6 @@
 # app.py - Main Streamlit application
 # Minor test change for Git push
-
+#Adding password check
 import streamlit as st
 import matplotlib.pyplot as plt
 import pandas as pd
