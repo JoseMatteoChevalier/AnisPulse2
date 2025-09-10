@@ -27,7 +27,7 @@ from project_templates import ProjectTemplates
 def check_password():
     """Returns `True` if the user had the correct password."""
 
-    def password_entered():
+def password_entered():
         """Checks whether a password entered by the user is correct."""
         if st.session_state["password"] == "ProjectRisk2024":  # Change this password
             st.session_state["password_correct"] = True
