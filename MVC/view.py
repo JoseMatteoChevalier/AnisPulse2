@@ -10,6 +10,8 @@ import matplotlib.patches as patches
 from sde_solver import SDEParameters
 import plotly.graph_objects as go
 
+#Gitcommitline#
+
 # -------------------------------
 # Sidebar
 # -------------------------------
