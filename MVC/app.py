@@ -24,10 +24,11 @@ from view import (
 from project_templates import ProjectTemplates
 
 
+# Add this after your imports, before main()
 def check_password():
     """Returns `True` if the user had the correct password."""
 
-def password_entered():
+    def password_entered():
         """Checks whether a password entered by the user is correct."""
         if st.session_state["password"] == "ProjectRisk2024":  # Change this password
             st.session_state["password_correct"] = True
@@ -35,6 +36,38 @@ def password_entered():
         else:
             st.session_state["password_correct"] = False
 
+    # Return True if the passward is validated.
+    if st.session_state.get("password_correct", False):
+        return True
+
+    # Show input for password.
+    st.text_input(
+        "🔒 Enter Password to Access Project Uncertainty Toolkit",
+        type="password",
+        on_change=password_entered,
+        key="password",
+        help="This app contains proprietary project risk algorithms"
+    )
+
+    if "password_correct" in st.session_state:
+        st.error("😞 Password incorrect")
+
+    return False
+
+
+# Add this at the very start of your main() function
+def main():
+    # Password protection - add this as the FIRST line in main()
+    if not check_password():
+        st.stop()
+
+    # Your existing code continues here...
+    st.set_page_config(
+        page_title="Project Management PDE Simulator",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    # ... rest of your existing main() function
 
 def main():
 
