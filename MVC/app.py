@@ -23,7 +23,24 @@ from view import (
 )
 from project_templates import ProjectTemplates
 
+
+def check_password():
+    """Returns `True` if the user had the correct password."""
+
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if st.session_state["password"] == "ProjectRisk2024":  # Change this password
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Don't store password
+        else:
+            st.session_state["password_correct"] = False
+
+
 def main():
+
+    if not check_password():
+        st.stop()
+
     st.set_page_config(
         page_title="Project Management PDE Simulator",
         layout="wide",
