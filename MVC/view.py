@@ -1,5 +1,6 @@
 import streamlit as st
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 from mpl_toolkits.mplot3d import Axes3D
 import mplcursors
 import networkx as nx
@@ -11,7 +12,7 @@ from sde_solver import SDEParameters
 import plotly.graph_objects as go
 
 
-#Gitcommitline#
+
 
 # -------------------------------
 # Sidebar
@@ -72,9 +73,6 @@ def render_editor_tab(model):
 
 
 
-# -------------------------------
-# Basic Schedule Tab (NEW)
-# -------------------------------
 
 
 # -------------------------------
@@ -138,7 +136,7 @@ def render_basic_schedule_tab(model):
 
     # Basic Gantt Chart
     st.subheader("📊 Basic Gantt Chart")
-    render_basic_gantt_chart(basic_schedule, model.task_df)
+    render_basic_gantt_chart_comparison(basic_schedule, model.task_df)
 
     # Critical Path Analysis
     st.subheader("🔍 Critical Path Analysis")
@@ -288,8 +286,38 @@ def create_schedule_dataframe(task_df, basic_schedule):
     return pd.DataFrame(schedule_data)
 
 
-def render_basic_gantt_chart(basic_schedule, task_df):
-    """Render a simple Gantt chart for the basic schedule"""
+# Add this new function to your view.py file
+
+def render_basic_gantt_chart_comparison(basic_schedule, task_df):
+    """
+    Side-by-side comparison of matplotlib vs plotly Gantt charts
+    for the Basic Schedule (CPM with critical path)
+    """
+
+    st.subheader("📊 Gantt Chart Comparison: Matplotlib vs Plotly")
+
+    # Create two columns for side-by-side comparison
+    col1, col2 = st.columns(2)
+
+    # LEFT COLUMN: Original matplotlib version
+    with col1:
+        st.write("**Current: Matplotlib Gantt**")
+
+        # Use your existing matplotlib function
+        render_basic_gantt_chart_matplotlib_only(basic_schedule, task_df)
+
+    # RIGHT COLUMN: New plotly version
+    with col2:
+        st.write("**New: Plotly Interactive Gantt**")
+
+        # Create the new plotly version
+        render_basic_gantt_chart_plotly(basic_schedule, task_df)
+
+
+def render_basic_gantt_chart_matplotlib_only(basic_schedule, task_df):
+    """
+    Your existing matplotlib Gantt chart (extracted for comparison)
+    """
     num_tasks = len(task_df)
     fig, ax = plt.subplots(figsize=(12, max(6, num_tasks * 0.4)))
 
@@ -312,6 +340,7 @@ def render_basic_gantt_chart(basic_schedule, task_df):
         ax.text(start + duration / 2, i, f"{task_name}\n({duration:.1f}d)",
                 ha='center', va='center', fontsize=8, fontweight='bold')
 
+        # Float bars
         if not is_critical and basic_schedule['total_float'][i] > 0:
             float_rect = patches.Rectangle(
                 (start + duration, i - 0.15), basic_schedule['total_float'][i], 0.3,
@@ -329,6 +358,7 @@ def render_basic_gantt_chart(basic_schedule, task_df):
     ax.invert_yaxis()
     ax.grid(True, axis='x', alpha=0.3)
 
+    # Legend
     normal_patch = patches.Patch(color=normal_color, alpha=0.7, label='Normal Tasks')
     critical_patch = patches.Patch(color=critical_color, alpha=0.7, label='Critical Path')
     float_patch = patches.Patch(color='lightgray', alpha=0.5, label='Float/Slack')
@@ -337,6 +367,178 @@ def render_basic_gantt_chart(basic_schedule, task_df):
     plt.tight_layout()
     st.pyplot(fig, use_container_width=True)
 
+
+# Replace your render_basic_gantt_chart_plotly function with this enhanced version
+
+def render_basic_gantt_chart_plotly(basic_schedule, task_df):
+    """
+    ENHANCED: Interactive plotly Gantt chart for Basic Schedule
+    """
+    try:
+        import plotly.graph_objects as go
+
+        num_tasks = len(task_df)
+        fig = go.Figure()
+
+        # Colors matching matplotlib version
+        normal_color = '#4CAF50'  # Green
+        critical_color = '#F44336'  # Red
+        float_color = 'lightgray'
+
+        # Track which legends we've shown
+        shown_normal = False
+        shown_critical = False
+        shown_float = False
+
+        # Add task bars
+        for i in range(num_tasks):
+            start = basic_schedule['early_start'][i]
+            duration = task_df.iloc[i]["Duration (days)"]
+            is_critical = i in basic_schedule['critical_path']
+            color = critical_color if is_critical else normal_color
+            task_name = task_df.iloc[i]["Task"]
+
+            # Determine legend visibility
+            if is_critical and not shown_critical:
+                show_legend = True
+                shown_critical = True
+                legend_name = "Critical Path"
+            elif not is_critical and not shown_normal:
+                show_legend = True
+                shown_normal = True
+                legend_name = "Normal Tasks"
+            else:
+                show_legend = False
+                legend_name = "Critical Path" if is_critical else "Normal Tasks"
+
+            # Main task bar - ENHANCED
+            fig.add_trace(go.Bar(
+                x=[duration],
+                y=[f"Task {i + 1}"],
+                base=[start],
+                orientation='h',
+                name=legend_name,
+                marker=dict(
+                    color=color,
+                    line=dict(color='black', width=1.5),
+                    opacity=0.8
+                ),
+                width=0.6,  # Make bars thicker
+                showlegend=show_legend,
+                text=f"{task_name}<br>({duration:.1f}d)",  # Add text labels
+                textposition='inside',
+                textfont=dict(color='white', size=10, family='Arial Bold'),
+                hovertemplate=f'<b>{task_name}</b><br>' +
+                              f'Duration: {duration:.1f} days<br>' +
+                              f'Start: Day {start:.1f}<br>' +
+                              f'Finish: Day {start + duration:.1f}<br>' +
+                              f'Status: {"Critical Path" if is_critical else "Normal"}<br>' +
+                              f'Float: {basic_schedule["total_float"][i]:.1f} days<br>' +
+                              '<extra></extra>'
+            ))
+
+            # Float/slack bars for non-critical tasks - ENHANCED
+            if not is_critical and basic_schedule['total_float'][i] > 0:
+                if not shown_float:
+                    show_float_legend = True
+                    shown_float = True
+                else:
+                    show_float_legend = False
+
+                fig.add_trace(go.Bar(
+                    x=[basic_schedule['total_float'][i]],
+                    y=[f"Task {i + 1}"],
+                    base=[start + duration],
+                    orientation='h',
+                    name="Float/Slack",
+                    marker=dict(
+                        color=float_color,
+                        line=dict(color='gray', width=1),
+                        opacity=0.6
+                    ),
+                    width=0.3,  # Thinner for float bars
+                    showlegend=show_float_legend,
+                    text=f"Float: {basic_schedule['total_float'][i]:.1f}d",
+                    textposition='inside',
+                    textfont=dict(color='black', size=8),
+                    hovertemplate=f'<b>Float Time</b><br>' +
+                                  f'Available slack: {basic_schedule["total_float"][i]:.1f} days<br>' +
+                                  f'Can delay without affecting project<br>' +
+                                  '<extra></extra>'
+                ))
+
+        # ENHANCED Layout
+        fig.update_layout(
+            title=dict(
+                text='Basic Schedule Gantt Chart<br><sub>(Green=Normal, Red=Critical Path)</sub>',
+                font=dict(color='black', size=18, family='Arial Bold'),
+                x=0.5
+            ),
+            xaxis_title='Time (Days)',
+            yaxis_title='Tasks',
+            font=dict(color='black', size=12, family='Arial'),
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            height=max(500, num_tasks * 60),  # More space per task
+            margin=dict(l=120, r=80, t=100, b=80),  # More margin for labels
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5,
+                font=dict(size=12)
+            ),
+            bargap=0.2,  # Space between task bars
+            bargroupgap=0.1
+        )
+
+        # ENHANCED Axes styling
+        # ENHANCED Axes styling
+        fig.update_xaxes(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(200,200,200,0.4)',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            tickfont=dict(color='black', size=11),
+            title=dict(font=dict(color='black', size=14))  # ← Fixed
+        )
+
+        fig.update_yaxes(
+            showgrid=False,
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            categoryorder='array',
+            categoryarray=[f"Task {i + 1}" for i in reversed(range(num_tasks))],
+            tickfont=dict(color='black', size=12, family='Arial Bold'),
+            title=dict(font=dict(color='black', size=14))  # ← Fixed
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # ENHANCED comparison notes
+        st.write("**🔍 Plotly Gantt Advantages:**")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.write("- **Interactive hover** shows detailed task information")
+            st.write("- **Zoom and pan** for large projects")
+        with col_b:
+            st.write("- **Professional styling** and responsive design")
+            st.write("- **Mobile-friendly** touch interactions")
+
+    except ImportError:
+        st.error("Plotly not available for interactive Gantt chart")
+    except Exception as e:
+        st.error(f"Plotly Gantt error: {str(e)}")
+        st.write("Full error details:", str(e))
+
+# INTEGRATION: Update your render_basic_schedule_tab function
+# Replace the call to render_basic_gantt_chart(basic_schedule, task_df)
+# With: render_basic_gantt_chart_comparison(basic_schedule, task_df)
 
 def render_critical_path_info(basic_schedule):
     """Display critical path information"""
@@ -629,9 +831,10 @@ def render_simulation_results_plotly_test(model):
         ))
 
         # Update 3D layout
+        # Update 3D layout - SIMPLIFIED VERSION
         fig_3d_plotly.update_layout(
-            title='3D Completion: Classical vs Diffusion',
-            font=dict(size=12),
+            title=dict(text='3D Completion: Classical vs Diffusion', font=dict(color='black')),
+            font=dict(size=12, color='black'),
             showlegend=True,
             height=500,
             margin=dict(l=20, r=20, t=60, b=20),
@@ -639,9 +842,7 @@ def render_simulation_results_plotly_test(model):
                 xaxis_title='Time (days)',
                 yaxis_title='Model (0=Classical, 1=Diffusion)',
                 zaxis_title='Average Completion (0—1)',
-                camera=dict(
-                    eye=dict(x=1.5, y=1.5, z=1.5)  # Nice viewing angle
-                ),
+                camera=dict(eye=dict(x=1.5, y=1.5, z=1.5)),
                 bgcolor='white'
             )
         )
@@ -1720,7 +1921,7 @@ def create_professional_plotly_chart(simulation_time, classical_risk, risk_curve
     fig.update_layout(
         title=dict(
             text="<b>Completion: Classical vs Diffusion</b>",
-            font=dict(size=18, family="Arial"),
+            font=dict(size=18,color="black", family="Arial"),
             x=0.5,
             y=0.95
         ),
@@ -1752,16 +1953,18 @@ def create_professional_plotly_chart(simulation_time, classical_risk, risk_curve
             gridwidth=1,
             gridcolor='rgba(200,200,200,0.3)',
             showline=True,
-            linewidth=1,
-            linecolor='rgba(150,150,150,0.8)'
+            linewidth=2,
+            linecolor='black',
+            tickcolor='black',
         ),
         yaxis=dict(
             showgrid=True,
             gridwidth=1,
             gridcolor='rgba(200,200,200,0.3)',
             showline=True,
-            linewidth=1,
-            linecolor='rgba(150,150,150,0.8)',
+            linewidth=2,
+            linecolor='black',
+            tickcolor='black',
             tickformat='.0%'  # Shows as percentages: 0%, 20%, 40%, etc.
         )
     )

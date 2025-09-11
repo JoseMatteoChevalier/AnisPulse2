@@ -14,8 +14,9 @@ from view import (
     render_sidebar,
     render_editor_tab,
     render_basic_schedule_tab,  # NEW IMPORT
-    render_simulation_results,
+    render_basic_gantt_chart_matplotlib_only,
     render_simulation_results_plotly_test,
+    render_basic_gantt_chart_comparison,
     render_dependency_tab,
     render_classical_gantt,
     render_pde_gantt,
