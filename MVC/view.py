@@ -1,6 +1,5 @@
 import streamlit as st
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 from mpl_toolkits.mplot3d import Axes3D
 import mplcursors
 import networkx as nx
@@ -10,9 +9,7 @@ import pandas as pd
 import matplotlib.patches as patches
 from sde_solver import SDEParameters
 import plotly.graph_objects as go
-
-
-
+from typing import Dict, List, Tuple, Optional
 
 # -------------------------------
 # Sidebar
@@ -1061,11 +1058,6 @@ def render_classical_gantt(model):
 def render_monte_carlo_gantt_chart(model):
     """Render Monte Carlo Gantt chart with confidence bands - FIXED VERSION"""
 
-    #TRoubleshooting Code for Testing the Switch Off#
-    #if model.simulation_data.get("monte_carlo_results"):
-    #    render_monte_carlo_debug_info(model)  # Add this line
-    #    render_monte_carlo_gantt_chart(model)  # Your existing call
-
     if not model.simulation_data.get("monte_carlo_results"):
         st.info("🎲 Run Monte Carlo analysis to view probabilistic Gantt chart")
         return
@@ -1611,8 +1603,6 @@ def render_sde_gantt(model, controller):
     elif viz_option == "Risk Analysis":
         render_sde_risk_analysis(sde_results, risk_summary)
 
-
-# TEMPORARY DEBUG FUNCTION - Add this to your view.py temporarily
 def debug_simulation_data_keys(model):
     """Temporary debug function to see all simulation data keys"""
     st.write("🔍 **DEBUG: All simulation_data keys:**")
@@ -1893,7 +1883,7 @@ def render_sde_risk_analysis(sde_results, risk_summary):
         st.metric("Correlation Strength", f"{sim_params.get('correlation_strength', 0):.2f}")
 
 
-# Plot_Plotly#Function
+
 
 def create_professional_plotly_chart(simulation_time, classical_risk, risk_curve):
     """Clean professional version with perfect spacing"""
@@ -1971,8 +1961,1830 @@ def create_professional_plotly_chart(simulation_time, classical_risk, risk_curve
 
     return fig
 
+def calculate_critical_path_from_times(start_times, finish_times, task_df):
+    """
+    DIAGNOSTIC VERSION: Simplified critical path with extensive logging
+    """
+    num_tasks = len(start_times)
+    durations = finish_times - start_times
+    project_duration = np.max(finish_times)
 
-# Then REPLACE the plotly section in your test function with this:
-# In render_simulation_results_plotly_test(), replace the plotly section:
+    print(f"🔍 === CRITICAL PATH DIAGNOSTIC ===")
+    print(f"🔍 Project duration: {project_duration:.2f}")
+    print(f"🔍 Task details:")
+    for i in range(num_tasks):
+        print(f"   Task {i + 1}: Start={start_times[i]:.2f}, Duration={durations[i]:.2f}, Finish={finish_times[i]:.2f}")
+
+    # Build dependency matrix
+    dependency_matrix = np.zeros((num_tasks, num_tasks))
+    for i, row in task_df.iterrows():
+        deps = str(row['Dependencies (IDs)']).strip()
+        if deps and deps != "":
+            dep_list = [d.strip() for d in deps.split(",")]
+            for dep in dep_list:
+                if dep.isdigit():
+                    dep_id = int(dep)
+                    if 1 <= dep_id <= num_tasks:
+                        dependency_matrix[dep_id - 1, i] = 1
+                        print(f"   Dependency: Task {dep_id} → Task {i + 1}")
+
+    print(f"🔍 Dependency matrix:\n{dependency_matrix}")
+
+    # SIMPLIFIED APPROACH: Find tasks on the longest path
+    # Step 1: Find tasks that finish at project completion
+    end_tasks = []
+    for i in range(num_tasks):
+        if abs(finish_times[i] - project_duration) < 0.1:
+            end_tasks.append(i)
+
+    print(f"🔍 Tasks finishing at project end: {[t + 1 for t in end_tasks]}")
+
+    # Step 2: Trace back through dependencies to find critical path
+    critical_tasks = set()
+
+    def trace_back(task_idx, path):
+        if task_idx in path:  # Avoid cycles
+            return
+
+        path.add(task_idx)
+        critical_tasks.add(task_idx)
+
+        # Find predecessors
+        predecessors = np.where(dependency_matrix[:, task_idx] > 0)[0]
+        print(f"   Task {task_idx + 1} predecessors: {[p + 1 for p in predecessors]}")
+
+        for pred in predecessors:
+            # Check if this predecessor is on the critical path
+            pred_finish = finish_times[pred]
+            task_start = start_times[task_idx]
+
+            # If predecessor finishes right when this task starts, it's critical
+            if abs(pred_finish - task_start) < 0.1:
+                trace_back(pred, path.copy())
+
+    # Trace back from all end tasks
+    for end_task in end_tasks:
+        print(f"🔍 Tracing back from Task {end_task + 1}")
+        trace_back(end_task, set())
+
+    critical_list = sorted(list(critical_tasks))
+    print(f"🔍 FINAL Critical tasks: {[t + 1 for t in critical_list]}")
+
+    # If still no critical tasks, force the longest path
+    if len(critical_list) == 0:
+        print("🔍 No critical path found, using fallback...")
+        # Find the task that finishes last
+        latest_task = np.argmax(finish_times)
+        critical_list = [latest_task]
+        print(f"🔍 Fallback critical task: {latest_task + 1}")
+
+    return critical_list
+
+# ALSO ADD this simple version that matches Basic Schedule exactly:
+def get_critical_path_like_basic_schedule():
+    """
+    Based on the Basic Schedule image, we know the critical path should be:
+    Tasks 1, 2, 3, 4, 6 (red) and Task 5 (green with float)
+    """
+    # This is what we EXPECT to see based on Basic Schedule
+    expected_critical = [0, 1, 2, 3, 5]  # Tasks 1,2,3,4,6 (0-indexed)
+    print(f"🎯 EXPECTED critical path from Basic Schedule: {[t + 1 for t in expected_critical]}")
+    return expected_critical
+
+    # TEMPORARY TEST: Add this to your create_plotly_gantt_chart function
+    # Replace the line: critical_path = calculate_critical_path_from_times(start_times, start_times + durations, task_df)
+    # With: critical_path = get_critical_path_like_basic_schedule()  # TEMPORARY TEST
 
 
+    """
+    Calculate critical path using proper forward/backward pass - matches Basic Schedule logic
+    """
+    num_tasks = len(start_times)
+    durations = finish_times - start_times
+    project_duration = np.max(finish_times)
+
+    print(f"🔍 Project duration: {project_duration}")
+    print(f"🔍 Task finish times: {finish_times}")
+
+    # Build dependency matrix
+    dependency_matrix = np.zeros((num_tasks, num_tasks))
+    for i, row in task_df.iterrows():
+        deps = str(row['Dependencies (IDs)']).strip()
+        if deps and deps != "":
+            dep_list = [d.strip() for d in deps.split(",")]
+            for dep in dep_list:
+                if dep.isdigit():
+                    dep_id = int(dep)
+                    if 1 <= dep_id <= num_tasks:
+                        dependency_matrix[dep_id - 1, i] = 1
+
+    print(f"🔍 Dependency matrix:\n{dependency_matrix}")
+
+    # Calculate late finish times (backward pass)
+    late_finish = np.full(num_tasks, project_duration)
+
+    # Find tasks with no successors (end at project completion)
+    for i in range(num_tasks):
+        successors = np.where(dependency_matrix[i, :] == 1)[0]
+        if len(successors) == 0:
+            late_finish[i] = project_duration
+
+    # Backward pass calculation
+    changed = True
+    iterations = 0
+    while changed and iterations < num_tasks:
+        changed = False
+        iterations += 1
+
+        for i in range(num_tasks):
+            successors = np.where(dependency_matrix[i, :] == 1)[0]
+            if len(successors) > 0:
+                # Late finish = minimum of successors' late start times
+                successor_late_starts = []
+                for s in successors:
+                    successor_late_start = late_finish[s] - durations[s]
+                    successor_late_starts.append(successor_late_start)
+
+                new_late_finish = min(successor_late_starts)
+                if abs(new_late_finish - late_finish[i]) > 0.001:
+                    late_finish[i] = new_late_finish
+                    changed = True
+
+    # Calculate late start times
+    late_start = late_finish - durations
+
+    # Total float = late start - early start
+    total_float = late_start - start_times
+
+    print(f"🔍 Early start: {start_times}")
+    print(f"🔍 Late start: {late_start}")
+    print(f"🔍 Total float: {total_float}")
+
+    # Critical tasks are those with zero (or near-zero) float
+    critical_tasks = []
+    for i in range(num_tasks):
+        if abs(total_float[i]) < 0.1:  # Allow small rounding errors
+            critical_tasks.append(i)
+
+    print(f"🔍 Critical tasks found: {critical_tasks}")
+
+    # If no critical tasks found, use the longest path
+    if len(critical_tasks) == 0:
+        # Find tasks that finish at project completion time
+        for i in range(num_tasks):
+            if abs(finish_times[i] - project_duration) < 0.1:
+                critical_tasks.append(i)
+
+    return critical_tasks
+# Diagnostic Test#
+
+def create_plotly_gantt_chart(start_times, durations, task_names, chart_title, critical_path=None, task_df=None,
+                              adjacency_matrix=None, finish_times=None):
+    """
+    Create Plotly Gantt chart with proper critical path and dependency arrows
+    """
+    num_tasks = len(task_names)
+
+    # Calculate critical path if not provided
+    if critical_path is None and task_df is not None:
+        critical_path = calculate_critical_path_from_times(start_times, start_times + durations, task_df)
+        print(f"🔧 Calculated critical path: {critical_path}")
+
+    if critical_path is None:
+        critical_path = []
+
+    # Create figure
+    fig = go.Figure()
+
+    # EXACT colors from Basic Schedule
+    normal_color = '#4CAF50'  # Green
+    critical_color = '#F44336'  # Red
+
+    # Add bars for each task
+    for i in range(num_tasks):
+        start = start_times[i]
+        duration = durations[i]
+        finish = start + duration
+        name = task_names[i]
+
+        # Determine if task is critical
+        is_critical = i in critical_path
+        color = critical_color if is_critical else normal_color
+
+        print(f"Task {i + 1}: {name} - Critical: {is_critical} - Color: {'RED' if is_critical else 'GREEN'}")
+
+        # Get risk level if task_df provided
+        risk_level = 0
+        if task_df is not None:
+            try:
+                risk_level = task_df.iloc[i]['Risk (0-5)']
+            except:
+                risk_level = 0
+
+        # Main task bar
+        fig.add_trace(go.Bar(
+            y=[i],
+            x=[duration],
+            base=[start],
+            orientation='h',
+            marker=dict(
+                color=color,
+                line=dict(color='black', width=1),
+                opacity=0.8
+            ),
+            name=name,
+            hovertemplate=
+            f"<b>{name}</b><br>" +
+            f"Duration: {duration:.1f} days<br>" +
+            f"Start: {start:.1f} days<br>" +
+            f"Finish: {finish:.1f} days<br>" +
+            f"Risk Level: {risk_level:.1f}<br>" +
+            f"Status: {'🔴 Critical Path' if is_critical else '🟢 Normal Task'}<br>" +
+            "<extra></extra>",
+            showlegend=False
+        ))
+
+        # Add task label - BLACK text outside bar
+        fig.add_annotation(
+            x=start + duration + 1,
+            y=i,
+            text=f"{name} ({duration:.1f}d)",
+            showarrow=False,
+            xanchor="left",
+            yanchor="middle",
+            font=dict(size=10, color="#000000", family="Arial", weight="bold"),
+        )
+
+    # Add dependency arrows if adjacency matrix provided
+    if adjacency_matrix is not None:
+        print(f"🔍 Drawing arrows from adjacency matrix")
+        for i in range(num_tasks):
+            predecessors = np.where(adjacency_matrix[:, i] > 0)[0]
+            print(f"Task {i + 1} predecessors: {[p + 1 for p in predecessors]}")
+
+            for pred in predecessors:
+                # Draw arrow from end of predecessor to start of successor
+                pred_finish = start_times[pred] + durations[pred]
+                succ_start = start_times[i]
+
+                fig.add_annotation(
+                    x=succ_start,
+                    y=i,
+                    ax=pred_finish,
+                    ay=pred,
+                    xref="x", yref="y",
+                    axref="x", ayref="y",
+                    showarrow=True,
+                    arrowhead=2,
+                    arrowsize=1.5,
+                    arrowwidth=2,
+                    arrowcolor="#000000"
+                )
+
+    # FIXED: Title and layout spacing
+    fig.update_layout(
+        title=dict(
+            text=f"<b style='color:#000000'>{chart_title}</b>",
+            font=dict(size=18, color="#000000", family="Arial"),
+            x=0.2,
+            y=0.97  # Move title higher to avoid legend overlap
+        ),
+        # Add subtitle for legend info
+        annotations=[
+            dict(
+                text="<span style='color:#000000'>(Green=Normal, Red=Critical Path)</span>",
+                xref="paper", yref="paper",
+                x=0.2, y=0.95,  # Position below title
+                xanchor='center', yanchor='top',
+                showarrow=False,
+                font=dict(size=14, color="#000000", family="Arial")
+            )
+        ],
+        xaxis=dict(
+            title="<b style='color:#000000'>Time (Days)</b>",
+            title_font=dict(color="#000000", size=14),
+            tickfont=dict(color="#000000", size=12),
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(0,0,0,0.2)',
+            showline=True,
+            linewidth=2,
+            linecolor='#000000',
+        ),
+        yaxis=dict(
+            title="<b style='color:#000000'>Tasks</b>",
+            title_font=dict(color="#000000", size=14),
+            tickfont=dict(color="#000000", size=12),
+            tickmode='array',
+            tickvals=list(range(num_tasks)),
+            ticktext=[f"Task {i + 1}" for i in range(num_tasks)],
+            autorange="reversed",
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(0,0,0,0.2)',
+            showline=True,
+            linewidth=2,
+            linecolor='#000000'
+        ),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        height=max(450, num_tasks * 50 + 200),  # More height for title spacing
+        margin=dict(l=100, r=250, t=150, b=80),  # More top margin for title
+        font=dict(family="Arial", size=12, color="#000000"),
+        showlegend=False  # Remove legend to avoid overlap
+    )
+
+    return fig
+
+
+def render_classical_gantt_plotly_test(model):
+    """Enhanced Classical Gantt with Plotly comparison"""
+
+    # Validation - same as your existing code
+    print(f"🔍 Classical Gantt called with {len(model.task_df)} tasks")
+
+    start_times = model.simulation_data.get("start_times_classical")
+    finish_times = model.simulation_data.get("finish_times_classical")
+
+    if start_times is None or finish_times is None:
+        st.error("Classical schedule data not available. Run simulation first.")
+        return
+
+    if len(start_times) != len(model.task_df):
+        st.error(f"⚠️ Data mismatch: {len(model.task_df)} tasks vs {len(start_times)} classical results")
+        return
+
+    if not model.simulation_data.get("tasks"):
+        st.info("Run the simulation to view the Gantt chart.")
+        return
+
+    task_df = model.task_df.copy()
+    tasks = task_df["Task"].tolist()
+    num_tasks = len(tasks)
+    durations_risk = task_df["Duration (days)"].values
+
+    classical_completion_time = np.max(finish_times)
+    pde_completion_time = np.max(model.simulation_data.get("finish_times_risk", finish_times))
+
+    st.subheader("📊 Classical Gantt Chart - Plotly Test")
+    st.write(
+        f"**Time to Completion:** Classical: {classical_completion_time:.1f} days, PDE: {pde_completion_time:.1f} days")
+
+    # Show both versions side by side
+    col1, col2 = st.columns(2)
+
+    # LEFT: Current Matplotlib Version
+    with col1:
+        st.subheader("Current (Matplotlib)")
+
+        colors = plt.cm.Oranges(np.linspace(0.3, 1, num_tasks))
+        fig_gantt, ax_gantt = plt.subplots(figsize=(8, 5), facecolor='#fff')
+
+        # Plot each task using the stored start_times
+        for i, row in task_df.iterrows():
+            color = colors[i]
+            bar = ax_gantt.barh(i, durations_risk[i], left=start_times[i], height=0.4,
+                                align="center", color=color, edgecolor="#1a2a44", alpha=0.9)
+
+            ax_gantt.text(start_times[i] + durations_risk[i] + 0.5, i,
+                          f"{row['Task']} ({durations_risk[i]:.0f}d)",
+                          ha="left", va="center", fontsize=8, fontfamily='Arial')
+
+        # Draw dependency arrows
+        adjacency = np.zeros((num_tasks, num_tasks))
+        for i, row in task_df.iterrows():
+            deps = str(row['Dependencies (IDs)']).split(",") if row['Dependencies (IDs)'] else []
+            deps = [int(d.strip()) - 1 for d in deps if d.strip().isdigit()]
+            for d in deps:
+                adjacency[d, i] = 1
+
+        for i in range(num_tasks):
+            preds = np.where(adjacency[:, i] > 0)[0]
+            for p in preds:
+                ax_gantt.annotate("",
+                                  xy=(start_times[i], i),
+                                  xytext=(finish_times[p], p),
+                                  arrowprops=dict(arrowstyle="->", color="#1a2a44", lw=1.5))
+
+        ax_gantt.set_yticks(range(num_tasks))
+        ax_gantt.set_yticklabels([f"{i + 1}" for i in range(num_tasks)], fontsize=10, fontfamily='Arial')
+        ax_gantt.invert_yaxis()
+        ax_gantt.set_xlabel("Time (days)", fontsize=12, fontfamily='Arial')
+        ax_gantt.set_ylabel("Task ID", fontsize=12, fontfamily='Arial')
+        ax_gantt.set_title("Gantt Chart (Classical)", fontsize=14, fontfamily='Arial', pad=10)
+        ax_gantt.grid(True, axis="x", linestyle="--", alpha=0.7, color='#2a4066')
+        ax_gantt.set_facecolor('#fff')
+
+        st.pyplot(fig_gantt, use_container_width=True)
+
+    # RIGHT: New Plotly Version
+    with col2:
+        st.subheader("New (Plotly)")
+
+        try:
+            # Create Plotly Gantt chart
+            fig_plotly = create_plotly_gantt_chart(
+                start_times=start_times,
+                durations=durations_risk,
+                task_names=tasks,
+                chart_title="Classical Gantt Chart"
+            )
+
+            st.plotly_chart(fig_plotly, use_container_width=True)
+
+        except Exception as e:
+            st.error(f"Plotly error: {str(e)}")
+
+    # Comparison notes
+    st.markdown("---")
+    st.write("**📈 Classical Gantt Differences:**")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.write("**Matplotlib:**")
+        st.write("- Static chart")
+        st.write("- Dependency arrows")
+        st.write("- Fixed hover info")
+
+    with col_b:
+        st.write("**Plotly:**")
+        st.write("- **Interactive zoom/pan**")
+        st.write("- **Rich hover tooltips**")
+        st.write("- **Professional styling**")
+        st.write("- **Responsive design**")
+
+
+def render_pde_gantt_plotly_test(model):
+    """Enhanced PDE Gantt with Plotly comparison"""
+
+    # Validation - same as your existing code
+    print(f"🔍 PDE Gantt called with {len(model.task_df)} tasks")
+
+    if not model.simulation_data.get("tasks"):
+        st.info("Run the simulation to view the PDE Gantt chart.")
+        return
+
+    # Get arrays and validate they exist
+    start_times = model.simulation_data.get("start_times_risk")
+    finish_times = model.simulation_data.get("finish_times_risk")
+    durations_risk = model.simulation_data.get("durations_risk")
+
+    if start_times is None or finish_times is None or durations_risk is None:
+        st.error("PDE simulation data missing. Run simulation first.")
+        return
+
+    if len(start_times) != len(model.task_df):
+        st.error(f"⚠️ Data mismatch: {len(model.task_df)} tasks vs {len(start_times)} PDE results")
+        return
+
+    task_df = model.task_df.copy()
+    tasks = model.simulation_data["tasks"]
+    num_tasks = model.simulation_data["num_tasks"]
+
+    pde_completion_time = np.max(finish_times)
+    st.subheader("🌊 PDE Gantt Chart - Plotly Test")
+    st.write(f"**Time to Completion:** PDE: {pde_completion_time:.1f} days")
+
+    # TOP: Current Matplotlib Version
+    st.subheader("Current (Matplotlib)")
+
+    colors = plt.cm.Oranges(np.linspace(0.3, 1, num_tasks))
+    fig_gantt, ax_gantt = plt.subplots(figsize=(8, 5), facecolor='#fff')
+
+    for i, row in task_df.iterrows():
+        color = colors[i]
+        bar = ax_gantt.barh(i, durations_risk[i], left=start_times[i], height=0.4,
+                            align="center", color=color, edgecolor="#1a2a44", alpha=0.9)
+
+        ax_gantt.text(start_times[i] + durations_risk[i] + 0.5, i,
+                      f"{row['Task']} ({durations_risk[i]:.0f}d)",
+                      ha="left", va="center", fontsize=8, fontfamily='Arial')
+
+    # Draw arrows
+    adjacency = model.simulation_data["adjacency"]
+    for i in range(num_tasks):
+        preds = np.where(adjacency[:, i] > 0)[0]
+        for p in preds:
+            ax_gantt.annotate("",
+                              xy=(start_times[i], i),
+                              xytext=(finish_times[p], p),
+                              arrowprops=dict(arrowstyle="->", color="#1a2a44", lw=1.5))
+
+    ax_gantt.set_yticks(range(num_tasks))
+    ax_gantt.set_yticklabels([f"{i + 1}" for i in range(num_tasks)], fontsize=10, fontfamily='Arial')
+    ax_gantt.invert_yaxis()
+    ax_gantt.set_xlabel("Time (days)", fontsize=12, fontfamily='Arial')
+    ax_gantt.set_ylabel("Task ID", fontsize=12, fontfamily='Arial')
+    ax_gantt.set_title("Gantt Chart (PDE)", fontsize=14, fontfamily='Arial', pad=10)
+    ax_gantt.grid(True, axis="x", linestyle="--", alpha=0.7, color='#2a4066')
+    ax_gantt.set_facecolor('#fff')
+
+    st.pyplot(fig_gantt, use_container_width=True)
+
+    # BOTTOM: New Plotly Version
+    st.subheader("New (Plotly)")
+
+    try:
+        # Create Plotly Gantt chart with enhanced formatting
+        fig_plotly = create_plotly_gantt_chart(
+            start_times=start_times,
+            durations=durations_risk,
+            task_names=tasks,
+            chart_title="PDE Gantt Chart",
+            task_df=task_df
+        )
+
+        st.plotly_chart(fig_plotly, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"Plotly error: {str(e)}")
+
+    # Comparison notes
+    st.markdown("---")
+    st.write("**🌊 PDE Gantt Differences:**")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.write("**Matplotlib:**")
+        st.write("- Static chart")
+        st.write("- Dependency arrows")
+        st.write("- Fixed styling")
+
+    with col_b:
+        st.write("**Plotly:**")
+        st.write("- **Interactive exploration**")
+        st.write("- **Detailed hover information**")
+        st.write("- **Modern indigo/teal design**")
+        st.write("- **Better task identification**")
+
+
+# Update your existing tab rendering functions
+def render_classical_gantt_enhanced(model):
+    """Enhanced classical gantt with Plotly test option"""
+
+    # Add toggle for testing
+    test_plotly = st.checkbox("🧪 Test Plotly Version", value=False, key="test_classical_plotly")
+
+    if test_plotly:
+        render_classical_gantt_plotly_test(model)
+    else:
+        # Your existing matplotlib code
+        render_classical_gantt(model)
+
+
+def render_pde_gantt_enhanced(model):
+    """Enhanced PDE gantt with Plotly test option"""
+    print("In Use 2450")
+
+    # Add toggle for testing
+    test_plotly = st.checkbox("🧪 Test Plotly Version", value=False, key="test_pde_plotly")
+
+    if test_plotly:
+        render_pde_gantt_plotly_test(model)
+    else:
+        # Your existing matplotlib code
+        render_pde_gantt(model)
+
+
+
+## HIGH LEVEL PLOTTING ABSTRACTOR ##
+# UNIFIED PLOTLY GANTT SYSTEM - Add to view.py
+
+
+def build_adjacency_from_task_df(task_df):
+    """Build adjacency matrix from task DataFrame"""
+    print("In Use 2558")
+
+    num_tasks = len(task_df)
+    adjacency = np.zeros((num_tasks, num_tasks))
+
+    for i, row in task_df.iterrows():
+        deps_str = str(row['Dependencies (IDs)']).strip()
+        if deps_str and deps_str != "" and deps_str != "nan":
+            deps = deps_str.split(",")
+            deps = [d.strip() for d in deps if d.strip().isdigit()]
+
+            for dep in deps:
+                dep_id = int(dep)
+                if 1 <= dep_id <= num_tasks:
+                    adjacency[dep_id - 1, i] = 1
+
+    return adjacency
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#continuing development#
+#Add this to view.py - COMPLETE Unified Gantt Test Function with Cinematic Support
+
+#Add this to view.py - COMPLETE Unified Gantt Test Function with Cinematic Support
+
+
+def render_cinematic_gantt_test(model, chart_type):
+    """
+
+    🎬 CINEMATIC GANTT CHART
+    D3.js-inspired, elegant timeline with smooth interactions
+    """
+    print("2691 in USE")
+    # Extract data using existing function
+    chart_data = extract_gantt_chart_data(model, chart_type)
+    if not chart_data:
+        st.error(f"No data available for {chart_type} chart.")
+        return
+
+    # Prepare data for px.timeline
+    timeline_df = prepare_timeline_dataframe(chart_data)
+
+    # Store timeline_df in chart_data for later use
+    chart_data['timeline_df'] = timeline_df
+
+    # Create base timeline with px.timeline
+    fig = create_cinematic_timeline(timeline_df, chart_data)
+
+    # Add cinematic enhancements
+    fig = add_cinematic_effects(fig, chart_data,timeline_df)
+
+    # Display with full interaction
+    st.plotly_chart(fig, use_container_width=True, config={
+        'displayModeBar': True,
+        'displaylogo': False,
+        'modeBarButtonsToAdd': ['drawline', 'drawopenpath', 'eraseshape'],
+        'toImageButtonOptions': {'format': 'png', 'filename': f'{chart_type}_gantt', 'scale': 2}
+    })
+
+def prepare_timeline_dataframe(chart_data):
+    """
+    Convert chart data to px.timeline compatible DataFrame
+    """
+    import pandas as pd
+    from datetime import datetime, timedelta
+
+    # Use relative dates starting from today for realistic timeline feel
+    print("In Use 2727")
+
+    base_date = datetime.now().date()
+
+    timeline_data = []
+    for i in range(chart_data['num_tasks']):
+        start_date = base_date + timedelta(days=int(chart_data['start_times'][i]))
+        finish_date = base_date + timedelta(days=int(chart_data['finish_times'][i]))
+
+        # Determine status for color mapping
+        is_critical = i in chart_data['critical_path']
+        has_float = chart_data['has_float'] and chart_data['float_times'] is not None
+
+        if is_critical:
+            status = "Critical Path"
+            priority = "High"
+        elif has_float and chart_data['float_times'][i] > 0:
+            status = "With Float"
+            priority = "Medium"
+        else:
+            status = "Normal"
+            priority = "Normal"
+
+        timeline_data.append({
+            'Task': chart_data['task_names'][i],
+            'Task_ID': f"Task {i + 1}",
+            'Start': start_date,
+            'Finish': finish_date,
+            'Duration': chart_data['durations'][i],
+            'Status': status,
+            'Priority': priority,
+            'Resource': f"Team {(i % 3) + 1}",  # Assign to teams for grouping
+            'Progress': min(100, max(0, (chart_data['durations'][i] / 30) * 100)),  # Simulated progress
+            'Float': chart_data['float_times'][i] if has_float else 0,
+            'Description': f"{chart_data['task_names'][i]} - {chart_data['durations'][i]:.1f} days"
+        })
+
+    return pd.DataFrame(timeline_data)
+
+def create_cinematic_timeline(df, chart_data):
+    """
+    Create base timeline with px.timeline and cinematic color scheme
+    """
+    import plotly.express as px
+
+    print("In Use 2771")
+
+    # CINEMATIC COLOR PALETTE - Indigo & Teal
+    color_map = {
+        "Critical Path": "#3F51B5",  # Deep Indigo
+        "Normal": "#00695C",  # Teal
+        "With Float": "#26A69A"  # Light Teal
+    }
+
+    # Create timeline with px.timeline
+    fig = px.timeline(
+        df,
+        x_start="Start",
+        x_end="Finish",
+        y="Task_ID",
+        color="Status",
+        color_discrete_map=color_map,
+        title=f"📊 {chart_data['title']} - Cinematic View",
+        hover_data=["Duration", "Float", "Resource", "Progress"],
+        labels={
+            "Task_ID": "Tasks",
+            "Start": "Timeline",
+            "Status": "Task Status"
+        }
+    )
+
+    return fig
+
+def add_cinematic_effects(fig, chart_data, timeline_df):
+    """
+    Add D3.js-inspired cinematic effects and interactions
+    """
+    print("In Use 2884")
+
+    # CINEMATIC BACKGROUND - Dark theme with subtle gradients
+    fig.update_layout(
+        # Dark cinematic background
+        plot_bgcolor='#0D1117',  # GitHub dark background
+        paper_bgcolor='#161B22',  # Slightly lighter dark
+
+        # CINEMATIC TYPOGRAPHY
+        title=dict(
+            text=f"<b style='color:#E6EDF3'>{chart_data['title']}</b><br>" +
+                 "<sub style='color:#8B949E'>Interactive Project Timeline</sub>",
+            font=dict(
+                family="'Segoe UI', 'SF Pro Display', -apple-system, sans-serif",
+                size=24,
+                color="#E6EDF3"
+            ),
+            x=0.5,
+            y=0.95,
+            xanchor='center'
+        ),
+
+        # AXIS STYLING - Minimal, elegant
+        xaxis=dict(
+            title=dict(
+                text="<b style='color:#E6EDF3'>Timeline</b>",
+                font=dict(size=14, color="#E6EDF3")
+            ),
+            tickfont=dict(color="#8B949E", size=11),
+            gridcolor='rgba(139, 148, 158, 0.1)',  # Subtle grid
+            gridwidth=1,
+            showline=True,
+            linecolor='#30363D',
+            linewidth=2,
+            zeroline=False,
+            # Custom tick format for dates
+            tickformat='%b %d'
+        ),
+
+        yaxis=dict(
+            title=dict(
+                text="<b style='color:#E6EDF3'>Tasks</b>",
+                font=dict(size=14, color="#E6EDF3")
+            ),
+            tickfont=dict(
+                color="#E6EDF3",
+                size=12,
+                family="'SF Mono', 'Monaco', 'Menlo', monospace"
+            ),
+            gridcolor='rgba(139, 148, 158, 0.05)',
+            showline=True,
+            linecolor='#30363D',
+            linewidth=2,
+            categoryorder='array',
+            categoryarray=[f"Task {i + 1}" for i in reversed(range(chart_data['num_tasks']))]
+        ),
+
+        # LEGEND - Floating, elegant
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=0.20,
+            xanchor="left",
+            x=0.025,
+            bgcolor="rgba(22, 27, 34, 0.8)",
+            bordercolor="#30363D",
+            borderwidth=1,
+            font=dict(color="#E6EDF3", size=11)
+        ),
+
+        # MARGINS for cinematic spacing
+        margin=dict(l=80, r=40, t=120, b=60),
+
+        # HEIGHT - Dynamic based on content
+        height=max(500, chart_data['num_tasks'] * 70 + 200),
+
+        # INTERACTIONS - Smooth and responsive
+        hovermode='closest',
+        transition={'duration': 300, 'easing': 'cubic-in-out'},
+
+        # ANNOTATIONS - Subtle watermark
+        annotations=[
+            dict(
+                text="<i style='color:#6E7681'>Generated by PDE Project Simulator</i>",
+                xref="paper", yref="paper",
+                x=1, y=0,
+                xanchor='right', yanchor='bottom',
+                showarrow=False,
+                font=dict(size=9, color="#6E7681")
+            )
+        ]
+    )
+
+    # ENHANCED HOVER TEMPLATE with task names and durations
+    fig.update_traces(
+        # Subtle shadow effect
+        marker=dict(
+            line=dict(
+                color='rgba(255, 255, 255, 0.1)',  # Subtle highlight
+                width=0.5
+            ),
+            opacity=0.9
+        ),
+        # Add task names and durations as text on bars
+        texttemplate='<b>%{customdata[0]}</b><br>(%{customdata[1]:.1f}d)',
+        textposition='inside',
+        textfont=dict(color='white', size=11, family='Arial Bold'),
+        # ENHANCED HOVER TEMPLATE
+        hovertemplate=
+        "<b style='color:#E6EDF3'>%{customdata[0]}</b><br>" +
+        "<span style='color:#8B949E'>Duration:</span> <b>%{customdata[1]:.1f} days</b><br>" +
+        "<span style='color:#8B949E'>Start:</span> <b>%{base}</b><br>" +
+        "<span style='color:#8B949E'>End:</span> <b>%{x}</b><br>" +
+        "<span style='color:#8B949E'>Status:</span> <b>%{fullData.name}</b><br>" +
+        "<extra></extra>",
+
+        # Add custom data for task names and durations
+        customdata=[[row['Task'], row['Duration']] for _, row in timeline_df.iterrows()]
+    )
+
+    # ADD DEPENDENCY ARROWS - Sleek, minimal
+    if chart_data.get('adjacency_matrix') is not None:
+        add_cinematic_arrows(fig, chart_data)
+
+    # ADD SUBTLE ANIMATIONS AND FILTERS
+    fig.update_layout(
+        updatemenus=[
+            dict(
+                type="buttons",
+                direction="left",
+                buttons=list([
+                    dict(
+                        args=[{"visible": [True] * len(fig.data)}],
+                        label="Show All",
+                        method="restyle"
+                    ),
+                    dict(
+                        args=[{"visible": [True if "Critical" in str(trace.name) else False for trace in fig.data]}],
+                        label="Critical Only",
+                        method="restyle"
+                    )
+                ]),
+                pad={"r": 10, "t": 10},
+                showactive=True,
+                x=0.02,
+                xanchor="left",
+                y=0.10,
+                yanchor="top",
+                bgcolor="rgba(22, 27, 34, 0.8)",
+                bordercolor="#30363D",
+                font=dict(color="#E6EDF3")
+            ),
+        ]
+    )
+
+    return fig
+
+def add_cinematic_arrows(fig, chart_data):
+    """
+    Add elegant, D3.js-inspired dependency arrows
+    """
+    print("In Use addcinematicarrows 2964")
+
+    adjacency = chart_data['adjacency_matrix']
+    start_times = chart_data['start_times']
+    finish_times = chart_data['finish_times']
+
+    # Convert to date format for timeline
+    from datetime import datetime, timedelta
+    base_date = datetime.now().date()
+
+    for i in range(chart_data['num_tasks']):
+        predecessors = np.where(adjacency[:, i] > 0)[0]
+        for pred in predecessors:
+            # Calculate arrow positions
+            pred_finish_date = base_date + timedelta(days=int(finish_times[pred]))
+            succ_start_date = base_date + timedelta(days=int(start_times[i]))
+
+            # Add subtle, elegant arrow
+            fig.add_annotation(
+                x=succ_start_date,
+                y=f"Task {i + 1}",
+                ax=pred_finish_date,
+                ay=f"Task {pred + 1}",
+                xref="x", yref="y",
+                axref="x", ayref="y",
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1.2,
+                arrowwidth=1.5,
+                arrowcolor="#6E7681",  # Subtle gray
+                opacity=0.6,
+                # Curved arrow for elegance
+                standoff=3,
+                startstandoff=3
+            )
+
+
+
+def create_unified_plotly_figure(data):
+    """
+    Create Plotly figure with unified styling
+    ENHANCED to match the working Basic Schedule look exactly
+    """
+    import plotly.graph_objects as go
+
+    num_tasks = data['num_tasks']
+    task_names = data['task_names']
+    start_times = data['start_times']
+    durations = data['durations']
+    finish_times = data['finish_times']
+    critical_path = data['critical_path']
+    adjacency_matrix = data['adjacency_matrix']
+
+    # Colors - matching your working Basic Schedule
+    normal_color = '#4CAF50'  # Green
+    critical_color = '#F44336'  # Red
+    float_color = 'lightgray'
+
+    # Create figure
+    fig = go.Figure()
+
+    # Track legends to show only once
+    shown_normal = False
+    shown_critical = False
+    shown_float = False
+
+    # Add task bars - MATCHING YOUR WORKING VERSION
+    for i in range(num_tasks):
+        start = start_times[i]
+        duration = durations[i]
+        finish = finish_times[i]
+        name = task_names[i]
+
+        # Determine if task is critical
+        is_critical = i in critical_path
+        color = critical_color if is_critical else normal_color
+
+        # Determine legend visibility (same logic as your working version)
+        if is_critical and not shown_critical:
+            show_legend = True
+            shown_critical = True
+            legend_name = "Critical Path"
+        elif not is_critical and not shown_normal:
+            show_legend = True
+            shown_normal = True
+            legend_name = "Normal Tasks"
+        else:
+            show_legend = False
+            legend_name = "Critical Path" if is_critical else "Normal Tasks"
+
+        # Main task bar - ENHANCED to match your working version EXACTLY
+        fig.add_trace(go.Bar(
+            x=[duration],
+            y=[f"Task {i + 1}"],  # Use same y-axis format as your working version
+            base=[start],
+            orientation='h',
+            name=legend_name,
+            marker=dict(
+                color=color,
+                line=dict(color='black', width=1.5),  # Thicker border like yours
+                opacity=0.8
+            ),
+            width=0.6,  # Make bars thicker like your version
+            showlegend=show_legend,
+            text=f"{name}<br>({duration:.1f}d)",  # WHITE TEXT INSIDE BARS
+            textposition='inside',
+            textfont=dict(color='white', size=10, family='Arial Bold'),  # WHITE TEXT
+            hovertemplate=f'<b>{name}</b><br>' +
+                          f'Duration: {duration:.1f} days<br>' +
+                          f'Start: Day {start:.1f}<br>' +
+                          f'Finish: Day {start + duration:.1f}<br>' +
+                          f'Status: {"Critical Path" if is_critical else "Normal"}<br>' +
+                          (f'Float: {data["float_times"][i]:.1f} days<br>' if data['has_float'] and data[
+                              'float_times'] is not None else '') +
+                          '<extra></extra>'
+        ))
+
+        # Float/slack bars for non-critical tasks - ENHANCED MATCHING YOUR VERSION
+        if data['has_float'] and data['float_times'] is not None:
+            float_time = data['float_times'][i]
+            if not is_critical and float_time > 0:
+                if not shown_float:
+                    show_float_legend = True
+                    shown_float = True
+                else:
+                    show_float_legend = False
+
+                fig.add_trace(go.Bar(
+                    x=[float_time],
+                    y=[f"Task {i + 1}"],
+                    base=[start + duration],
+                    orientation='h',
+                    name="Float/Slack",
+                    marker=dict(
+                        color=float_color,
+                        line=dict(color='gray', width=1),
+                        opacity=0.6
+                    ),
+                    width=0.3,  # Thinner for float bars
+                    showlegend=show_float_legend,
+                    text=f"Float: {float_time:.1f}d",
+                    textposition='inside',
+                    textfont=dict(color='black', size=8),
+                    hovertemplate=f'<b>Float Time</b><br>' +
+                                  f'Available slack: {float_time:.1f} days<br>' +
+                                  f'Can delay without affecting project<br>' +
+                                  '<extra></extra>'
+                ))
+
+    # Add dependency arrows - ENHANCED
+    if adjacency_matrix is not None:
+        for i in range(num_tasks):
+            predecessors = np.where(adjacency_matrix[:, i] > 0)[0]
+            for pred in predecessors:
+                # Arrow from end of predecessor to start of successor
+                pred_finish = finish_times[pred]
+                succ_start = start_times[i]
+
+                # Convert task numbers to y-axis positions (since we use "Task 1", "Task 2" format)
+                pred_y = f"Task {pred + 1}"
+                succ_y = f"Task {i + 1}"
+
+                fig.add_annotation(
+                    x=succ_start,
+                    y=succ_y,
+                    ax=pred_finish,
+                    ay=pred_y,
+                    xref="x", yref="y",
+                    axref="x", ayref="y",
+                    showarrow=True,
+                    arrowhead=2,
+                    arrowsize=1.5,
+                    arrowwidth=2,
+                    arrowcolor="#1a2a44"
+                )
+
+    # ENHANCED Layout - MATCHING YOUR WORKING VERSION EXACTLY
+    fig.update_layout(
+        title=dict(
+            text=f'{data["title"]}<br><sub>(Green=Normal, Red=Critical Path)</sub>',
+            font=dict(color='black', size=18, family='Arial Bold'),
+            x=0.5
+        ),
+        xaxis_title='Time (Days)',
+        yaxis_title='Tasks',
+        font=dict(color='black', size=12, family='Arial'),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        height=max(500, num_tasks * 60),  # More space per task like your version
+        margin=dict(l=120, r=80, t=100, b=80),  # More margin for labels
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=12)
+        ),
+        bargap=0.2,  # Space between task bars
+        bargroupgap=0.1
+    )
+
+    # ENHANCED Axes styling - MATCHING YOUR VERSION
+    fig.update_xaxes(
+        showgrid=True,
+        gridwidth=1,
+        gridcolor='rgba(200,200,200,0.4)',
+        showline=True,
+        linewidth=2,
+        linecolor='black',
+        tickfont=dict(color='black', size=11),
+        title=dict(font=dict(color='black', size=14))
+    )
+
+    fig.update_yaxes(
+        showgrid=False,
+        showline=True,
+        linewidth=2,
+        linecolor='black',
+        categoryorder='array',
+        categoryarray=[f"Task {i + 1}" for i in reversed(range(num_tasks))],  # Reversed order
+        tickfont=dict(color='black', size=12, family='Arial Bold'),
+        title=dict(font=dict(color='black', size=14))
+    )
+
+    return fig
+
+def calculate_critical_path_unified(start_times, finish_times, task_df):
+    """
+    Unified critical path calculation
+    Based on the working diagnostic version
+    """
+    num_tasks = len(start_times)
+    durations = finish_times - start_times
+    project_duration = np.max(finish_times)
+
+    # Build dependency matrix
+    dependency_matrix = build_dependency_matrix(task_df)
+
+    # Calculate late finish times (backward pass)
+    late_finish = np.full(num_tasks, project_duration)
+
+    # Backward pass calculation
+    changed = True
+    iterations = 0
+    while changed and iterations < num_tasks:
+        changed = False
+        iterations += 1
+
+        for i in range(num_tasks):
+            successors = np.where(dependency_matrix[i, :] == 1)[0]
+            if len(successors) > 0:
+                successor_late_starts = []
+                for s in successors:
+                    successor_late_start = late_finish[s] - durations[s]
+                    successor_late_starts.append(successor_late_start)
+
+                new_late_finish = min(successor_late_starts)
+                if abs(new_late_finish - late_finish[i]) > 0.001:
+                    late_finish[i] = new_late_finish
+                    changed = True
+
+    # Calculate late start times
+    late_start = late_finish - durations
+
+    # Total float = late start - early start
+    total_float = late_start - start_times
+
+    # Critical tasks are those with zero (or near-zero) float
+    critical_tasks = []
+    for i in range(num_tasks):
+        if abs(total_float[i]) < 0.1:  # Allow small rounding errors
+            critical_tasks.append(i)
+
+    # If no critical tasks found, use tasks# Add this to view.py - Unified Gantt Test Function
+
+
+
+
+def render_unified_gantt_test_tab(model):
+    """
+    🧪 UNIFIED GANTT TEST TAB
+    Single function that handles all chart types with multiple visual styles
+    """
+    print("In Use render_unified_gantt_test 3375")
+
+    st.subheader("🧪 Unified Gantt Chart Test")
+    st.info("Testing unified architecture for all Gantt chart types with multiple visual styles")
+    print("Lower version of Unified GANT TEST TAB IN USE?")
+    # Control panel with elegant layout
+    col1, col2, col3 = st.columns([2, 2, 1])
+
+    with col1:
+        chart_types = ["basic", "classical", "pde", "monte_carlo", "sde"]
+        selected_type = st.selectbox("📊 Chart Type", chart_types, index=0)
+
+    with col2:
+        style_options = ["Standard", "Cinematic"]
+        selected_style = st.selectbox("🎨 Visual Style", style_options, index=1)  # Default to Cinematic
+
+    with col3:
+        st.write("")  # Spacer
+        if st.button("🔄 Refresh", help="Reload chart with current settings"):
+            st.rerun()
+
+    # Display information about selected configuration
+    info_text = {
+        "basic": "Pure dependency-based schedule (CPM) with critical path and float",
+        "classical": "Classical risk-adjusted durations without diffusion effects",
+        "pde": "PDE simulation with risk propagation through dependencies",
+        "monte_carlo": "Mean completion times from Monte Carlo simulation results",
+        "sde": "Mean completion times from SDE stochastic simulation results"
+    }
+
+    # Style indicators
+    style_icons = {"Standard": "📋", "Cinematic": "🎬"}
+    style_desc = {
+        "Standard": "Clean, professional styling with go.Bar implementation",
+        "Cinematic": "D3.js-inspired dark theme with px.timeline and elegant effects"
+    }
+
+    st.info(
+        f"{style_icons[selected_style]} **{selected_type.title()} Chart ({selected_style}):** {info_text[selected_type]}")
+    st.caption(style_desc[selected_style])
+
+    # Render based on style selection
+    if selected_style == "Cinematic":
+        render_cinematic_gantt_test(model, selected_type)
+
+        # Show cinematic features
+        with st.expander("🎬 Cinematic Design Features", expanded=False):
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.markdown("""
+                **Visual Excellence:**
+                - 🌙 Dark theme with subtle gradients
+                - 🎨 Indigo & Teal color palette
+                - ✨ Subtle shadows and depth effects
+                - 🎬 Smooth transitions (300ms)
+                """)
+            with col_b:
+                st.markdown("""
+                **Advanced Interactions:**
+                - 📱 Interactive filtering buttons
+                - 🎯 Enhanced hover with rich data
+                - 🏷️ Crisp typography (SF Pro/Segoe)
+                - ➡️ Elegant curved dependency arrows
+                """)
+    else:
+        render_unified_plotly_gantt(model, selected_type)
+
+        # Show standard features
+        with st.expander("📋 Standard Design Features", expanded=False):
+            st.markdown("""
+            **Proven Reliability:**
+            - ✅ White text inside bars for clarity
+            - 🔗 Dependency arrows with precise positioning  
+            - 📊 Float bars for Basic Schedule type
+            - 🎯 Consistent green/red critical path logic
+            - 📱 Full container width responsiveness
+            """)
+
+    # Performance and debug information
+    with st.expander("🔍 Technical Information", expanded=False):
+        debug_unified_gantt_data(model, selected_type)
+
+        st.markdown("---")
+        st.write(
+            f"**Implementation:** {'px.timeline + enhancements' if selected_style == 'Cinematic' else 'go.Bar + manual timeline logic'}")
+        st.write(f"**Rendering Engine:** Plotly {'Express' if selected_style == 'Cinematic' else 'Graph Objects'}")
+        st.write(
+            f"**Color Scheme:** {'Indigo/Teal (Cinematic)' if selected_style == 'Cinematic' else 'Green/Red (Traditional)'}")
+
+def render_unified_plotly_gantt(model, chart_type):
+    """
+    UNIFIED PLOTLY GANTT - All logic in one place
+    Extracts data, calculates critical path, creates chart, displays result
+    """
+    print("In Use render_unified_plotly_gantt 3469")
+
+    # 1. EXTRACT DATA based on chart type
+    chart_data = extract_gantt_chart_data(model, chart_type)
+
+    if not chart_data:
+        st.error(f"No data available for {chart_type} chart. Run simulation first.")
+        return
+
+    # 2. CREATE PLOTLY FIGURE with unified styling
+    fig = create_unified_plotly_figure(chart_data)
+
+    # 3. DISPLAY
+    st.plotly_chart(fig, use_container_width=True)
+
+#Appears this one is being used...#
+def extract_gantt_chart_data(model, chart_type):
+    """
+    Extract and standardize data for each chart type
+    Returns consistent data structure for unified plotting
+    """
+    import plotly.graph_objects as go
+    print("In Use Extract GANNT CHART BOTTOM 3374")
+    task_df = model.task_df
+    if len(task_df) == 0:
+        return None
+
+    num_tasks = len(task_df)
+    task_names = task_df["Task"].tolist()
+
+    # Initialize return structure
+    data = {
+        'chart_type': chart_type,
+        'num_tasks': num_tasks,
+        'task_names': task_names,
+        'task_df': task_df,
+        'start_times': None,
+        'durations': None,
+        'finish_times': None,
+        'critical_path': [],
+        'adjacency_matrix': None,
+        'float_times': None,
+        'has_float': False,
+        'title': f"{chart_type.title()} Gantt Chart (Unified)"
+    }
+
+    try:
+        if chart_type == "basic":
+            # Extract from Basic Schedule calculation
+            basic_schedule = calculate_basic_schedule(task_df)
+            if basic_schedule:
+                data['start_times'] = basic_schedule['early_start']
+                data['durations'] = task_df["Duration (days)"].values
+                data['finish_times'] = basic_schedule['early_finish']
+                data['critical_path'] = basic_schedule['critical_path']
+                data['float_times'] = basic_schedule['total_float']
+                data['has_float'] = True
+                data['adjacency_matrix'] = build_dependency_matrix(task_df)
+
+        elif chart_type == "classical":
+            # Extract from Classical simulation data
+            start_times = model.simulation_data.get("start_times_classical")
+            finish_times = model.simulation_data.get("finish_times_classical")
+
+            if start_times is not None and finish_times is not None:
+                durations = task_df["Duration (days)"].values
+                data['start_times'] = start_times
+                data['durations'] = durations
+                data['finish_times'] = finish_times
+                data['critical_path'] = calculate_critical_path_unified(start_times, finish_times, task_df)
+                data['adjacency_matrix'] = build_dependency_matrix(task_df)
+
+        elif chart_type == "pde":
+            # Extract from PDE simulation data
+            start_times = model.simulation_data.get("start_times_risk")
+            finish_times = model.simulation_data.get("finish_times_risk")
+            durations_risk = model.simulation_data.get("durations_risk")
+
+            if start_times is not None and finish_times is not None:
+                data['start_times'] = start_times
+                data['durations'] = durations_risk if durations_risk is not None else task_df["Duration (days)"].values
+                data['finish_times'] = finish_times
+                data['critical_path'] = calculate_critical_path_unified(start_times, finish_times, task_df)
+                data['adjacency_matrix'] = model.simulation_data.get("adjacency")
+
+        elif chart_type == "monte_carlo":
+            # Extract from Monte Carlo results
+            mc_results = model.simulation_data.get("monte_carlo_results")
+            if mc_results:
+                mean_start = mc_results.get("mean_start_times")
+                mean_finish = mc_results.get("mean_finish_times")
+
+                if mean_start is not None and mean_finish is not None:
+                    data['start_times'] = mean_start
+                    data['finish_times'] = mean_finish
+                    data['durations'] = mean_finish - mean_start
+                    data['critical_path'] = calculate_critical_path_unified(mean_start, mean_finish, task_df)
+                    data['adjacency_matrix'] = build_dependency_matrix(task_df)
+
+        elif chart_type == "sde":
+            # Extract from SDE results (placeholder)
+            sde_results = model.simulation_data.get("sde_results")
+            if sde_results:
+                # For now, use placeholder logic - would need actual SDE data structure
+                durations = task_df["Duration (days)"].values
+                start_times = np.zeros(num_tasks)  # Placeholder
+                finish_times = start_times + durations  # Placeholder
+
+                data['start_times'] = start_times
+                data['durations'] = durations
+                data['finish_times'] = finish_times
+                data['critical_path'] = list(range(num_tasks))  # Placeholder
+                data['adjacency_matrix'] = build_dependency_matrix(task_df)
+
+        # Validate we got the required data
+        if data['start_times'] is None:
+            return None
+
+        return data
+
+    except Exception as e:
+        st.error(f"Error extracting {chart_type} data: {str(e)}")
+        return None
+
+def create_unified_plotly_figure(data):
+    """
+    Create Plotly figure with unified styling
+    ENHANCED to match the working Basic Schedule look exactly
+    """
+    import plotly.graph_objects as go
+
+    print("In Use Create Unified 3590")
+
+
+    num_tasks = data['num_tasks']
+    task_names = data['task_names']
+    start_times = data['start_times']
+    durations = data['durations']
+    finish_times = data['finish_times']
+    critical_path = data['critical_path']
+    adjacency_matrix = data['adjacency_matrix']
+
+    # Colors - matching your working Basic Schedule
+    normal_color = '#4CAF50'  # Green
+    critical_color = '#F44336'  # Red
+    float_color = 'lightgray'
+
+    # Create figure
+    fig = go.Figure()
+
+    # Track legends to show only once
+    shown_normal = False
+    shown_critical = False
+    shown_float = False
+
+    # Add task bars - MATCHING YOUR WORKING VERSION
+    for i in range(num_tasks):
+        start = start_times[i]
+        duration = durations[i]
+        finish = finish_times[i]
+        name = task_names[i]
+
+        # Determine if task is critical
+        is_critical = i in critical_path
+        color = critical_color if is_critical else normal_color
+
+        # Determine legend visibility (same logic as your working version)
+        if is_critical and not shown_critical:
+            show_legend = True
+            shown_critical = True
+            legend_name = "Critical Path"
+        elif not is_critical and not shown_normal:
+            show_legend = True
+            shown_normal = True
+            legend_name = "Normal Tasks"
+        else:
+            show_legend = False
+            legend_name = "Critical Path" if is_critical else "Normal Tasks"
+
+        # Main task bar - ENHANCED to match your working version EXACTLY
+        fig.add_trace(go.Bar(
+            x=[duration],
+            y=[f"Task {i + 1}"],  # Use same y-axis format as your working version
+            base=[start],
+            orientation='h',
+            name=legend_name,
+            marker=dict(
+                color=color,
+                line=dict(color='black', width=1.5),  # Thicker border like yours
+                opacity=0.8
+            ),
+            width=0.6,  # Make bars thicker like your version
+            showlegend=show_legend,
+            text=f"{name}<br>({duration:.1f}d)",  # WHITE TEXT INSIDE BARS
+            textposition='inside',
+            textfont=dict(color='white', size=10, family='Arial Bold'),  # WHITE TEXT
+            hovertemplate=f'<b>{name}</b><br>' +
+                          f'Duration: {duration:.1f} days<br>' +
+                          f'Start: Day {start:.1f}<br>' +
+                          f'Finish: Day {start + duration:.1f}<br>' +
+                          f'Status: {"Critical Path" if is_critical else "Normal"}<br>' +
+                          (f'Float: {data["float_times"][i]:.1f} days<br>' if data['has_float'] and data[
+                              'float_times'] is not None else '') +
+                          '<extra></extra>'
+        ))
+
+        # Float/slack bars for non-critical tasks - ENHANCED MATCHING YOUR VERSION
+        if data['has_float'] and data['float_times'] is not None:
+            float_time = data['float_times'][i]
+            if not is_critical and float_time > 0:
+                if not shown_float:
+                    show_float_legend = True
+                    shown_float = True
+                else:
+                    show_float_legend = False
+
+                fig.add_trace(go.Bar(
+                    x=[float_time],
+                    y=[f"Task {i + 1}"],
+                    base=[start + duration],
+                    orientation='h',
+                    name="Float/Slack",
+                    marker=dict(
+                        color=float_color,
+                        line=dict(color='gray', width=1),
+                        opacity=0.6
+                    ),
+                    width=0.3,  # Thinner for float bars
+                    showlegend=show_float_legend,
+                    text=f"Float: {float_time:.1f}d",
+                    textposition='inside',
+                    textfont=dict(color='black', size=8),
+                    hovertemplate=f'<b>Float Time</b><br>' +
+                                  f'Available slack: {float_time:.1f} days<br>' +
+                                  f'Can delay without affecting project<br>' +
+                                  '<extra></extra>'
+                ))
+
+    # Add dependency arrows - ENHANCED
+    if adjacency_matrix is not None:
+        for i in range(num_tasks):
+            predecessors = np.where(adjacency_matrix[:, i] > 0)[0]
+            for pred in predecessors:
+                # Arrow from end of predecessor to start of successor
+                pred_finish = finish_times[pred]
+                succ_start = start_times[i]
+
+                # Convert task numbers to y-axis positions (since we use "Task 1", "Task 2" format)
+                pred_y = f"Task {pred + 1}"
+                succ_y = f"Task {i + 1}"
+
+                fig.add_annotation(
+                    x=succ_start,
+                    y=succ_y,
+                    ax=pred_finish,
+                    ay=pred_y,
+                    xref="x", yref="y",
+                    axref="x", ayref="y",
+                    showarrow=True,
+                    arrowhead=2,
+                    arrowsize=1.5,
+                    arrowwidth=2,
+                    arrowcolor="#1a2a44"
+                )
+
+    # ENHANCED Layout - MATCHING YOUR WORKING VERSION EXACTLY
+    fig.update_layout(
+        title=dict(
+            text=f'{data["title"]}<br><sub>(Green=Normal, Red=Critical Path)</sub>',
+            font=dict(color='black', size=18, family='Arial Bold'),
+            x=0.5
+        ),
+        xaxis_title='Time (Days)',
+        yaxis_title='Tasks',
+        font=dict(color='black', size=12, family='Arial'),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        height=max(500, num_tasks * 60),  # More space per task like your version
+        margin=dict(l=120, r=80, t=100, b=80),  # More margin for labels
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=12)
+        ),
+        bargap=0.2,  # Space between task bars
+        bargroupgap=0.1
+    )
+
+    # ENHANCED Axes styling - MATCHING YOUR VERSION
+    fig.update_xaxes(
+        showgrid=True,
+        gridwidth=1,
+        gridcolor='rgba(200,200,200,0.4)',
+        showline=True,
+        linewidth=2,
+        linecolor='black',
+        tickfont=dict(color='black', size=11),
+        title=dict(font=dict(color='black', size=14))
+    )
+
+    fig.update_yaxes(
+        showgrid=False,
+        showline=True,
+        linewidth=2,
+        linecolor='black',
+        categoryorder='array',
+        categoryarray=[f"Task {i + 1}" for i in reversed(range(num_tasks))],  # Reversed order
+        tickfont=dict(color='black', size=12, family='Arial Bold'),
+        title=dict(font=dict(color='black', size=14))
+    )
+
+    return fig
+
+def calculate_critical_path_unified(start_times, finish_times, task_df):
+    """
+    Unified critical path calculation
+    Based on the working diagnostic version
+    """
+    print("In Use Calculate Critical Path 3791")
+
+    num_tasks = len(start_times)
+    durations = finish_times - start_times
+    project_duration = np.max(finish_times)
+
+    # Build dependency matrix
+    dependency_matrix = build_dependency_matrix(task_df)
+
+    # Calculate late finish times (backward pass)
+    late_finish = np.full(num_tasks, project_duration)
+
+    # Backward pass calculation
+    changed = True
+    iterations = 0
+    while changed and iterations < num_tasks:
+        changed = False
+        iterations += 1
+
+        for i in range(num_tasks):
+            successors = np.where(dependency_matrix[i, :] == 1)[0]
+            if len(successors) > 0:
+                successor_late_starts = []
+                for s in successors:
+                    successor_late_start = late_finish[s] - durations[s]
+                    successor_late_starts.append(successor_late_start)
+
+                new_late_finish = min(successor_late_starts)
+                if abs(new_late_finish - late_finish[i]) > 0.001:
+                    late_finish[i] = new_late_finish
+                    changed = True
+
+    # Calculate late start times
+    late_start = late_finish - durations
+
+    # Total float = late start - early start
+    total_float = late_start - start_times
+
+    # Critical tasks are those with zero (or near-zero) float
+    critical_tasks = []
+    for i in range(num_tasks):
+        if abs(total_float[i]) < 0.1:  # Allow small rounding errors
+            critical_tasks.append(i)
+
+    # If no critical tasks found, use tasks that finish at project completion
+    if len(critical_tasks) == 0:
+        for i in range(num_tasks):
+            if abs(finish_times[i] - project_duration) < 0.1:
+                critical_tasks.append(i)
+
+    return critical_tasks
+
+def debug_unified_gantt_data(model, chart_type):
+    """
+    Debug information for unified Gantt data extraction
+    """
+    print("In Use debug unified gantt data 3848")
+
+    st.write(f"**Chart Type:** {chart_type}")
+    st.write(f"**Task DataFrame:** {len(model.task_df)} tasks")
+
+    # Try to extract data and show what we get
+    data = extract_gantt_chart_data(model, chart_type)
+
+    if data:
+        st.write("✅ **Data extracted successfully**")
+        st.write(f"- Start times shape: {data['start_times'].shape if data['start_times'] is not None else 'None'}")
+        st.write(f"- Durations shape: {data['durations'].shape if data['durations'] is not None else 'None'}")
+        st.write(f"- Critical path: {[t + 1 for t in data['critical_path']] if data['critical_path'] else 'None'}")
+        st.write(f"- Has adjacency matrix: {data['adjacency_matrix'] is not None}")
+        st.write(f"- Has float data: {data['has_float']}")
+
+        if data['start_times'] is not None:
+            st.write(f"- Project duration: {np.max(data['finish_times']):.1f} days")
+
+        # Show first few data points
+        if data['start_times'] is not None and len(data['start_times']) > 0:
+            st.write("**Sample data (first 3 tasks):**")
+            for i in range(min(3, len(data['start_times']))):
+                st.write(
+                    f"  Task {i + 1}: Start={data['start_times'][i]:.1f}, Duration={data['durations'][i]:.1f}, Finish={data['finish_times'][i]:.1f}")
+    else:
+        st.error("❌ **No data available**")
+        st.write("Check if simulation has been run for this chart type.")
+
+
+# SUPPORTING FUNCTIONS (you likely already have these, but including for completeness)
+
+def calculate_basic_schedule(task_df):
+    """Calculate the most basic schedule possible"""
+    print("In Use calculate 3884")
+
+    try:
+        num_tasks = len(task_df)
+        early_start = np.zeros(num_tasks)
+        early_finish = np.zeros(num_tasks)
+        late_start = np.zeros(num_tasks)
+        late_finish = np.zeros(num_tasks)
+
+        dependency_matrix = build_dependency_matrix(task_df)
+        task_order = topological_sort(task_df, dependency_matrix)
+        if task_order is None:
+            return None
+
+        for task_idx in task_order:
+            predecessors = np.where(dependency_matrix[:, task_idx] == 1)[0]
+            if len(predecessors) > 0:
+                early_start[task_idx] = np.max(early_finish[predecessors])
+            else:
+                early_start[task_idx] = 0
+            duration = task_df.iloc[task_idx]["Duration (days)"]
+            early_finish[task_idx] = early_start[task_idx] + duration
+
+        project_duration = np.max(early_finish)
+
+        for i in range(num_tasks):
+            successors = np.where(dependency_matrix[i, :] == 1)[0]
+            if len(successors) == 0:
+                late_finish[i] = project_duration
+            else:
+                late_finish[i] = project_duration
+
+        for task_idx in reversed(task_order):
+            successors = np.where(dependency_matrix[task_idx, :] == 1)[0]
+            if len(successors) > 0:
+                late_finish[task_idx] = np.min(late_start[successors])
+            duration = task_df.iloc[task_idx]["Duration (days)"]
+            late_start[task_idx] = late_finish[task_idx] - duration
+
+        total_float = late_start - early_start
+        critical_tasks = np.where(np.abs(total_float) < 0.001)[0]
+        critical_path = find_critical_path(critical_tasks, dependency_matrix, task_order)
+
+        return {
+            'early_start': early_start,
+            'early_finish': early_finish,
+            'late_start': late_start,
+            'late_finish': late_finish,
+            'total_float': total_float,
+            'critical_path': critical_path,
+            'project_duration': project_duration,
+            'total_work': np.sum(task_df["Duration (days)"]),
+            'task_order': task_order
+        }
+    except Exception as e:
+        st.error(f"Error calculating basic schedule: {str(e)}")
+        return None
+
+
+def build_dependency_matrix(task_df):
+    """Build adjacency matrix from dependencies"""
+    print("In Use 3495")
+
+    num_tasks = len(task_df)
+    matrix = np.zeros((num_tasks, num_tasks))
+    for i, row in task_df.iterrows():
+        deps = str(row['Dependencies (IDs)']).strip()
+        if deps and deps != "":
+            dep_list = [d.strip() for d in deps.split(",")]
+            for dep in dep_list:
+                if dep.isdigit():
+                    dep_id = int(dep)
+                    if 1 <= dep_id <= num_tasks:
+                        matrix[dep_id - 1, i] = 1
+    return matrix
+
+
+def topological_sort(task_df, dependency_matrix):
+    """Topological sort using Kahn's algorithm"""
+    print("In Use 3963")
+
+    num_tasks = len(task_df)
+    in_degree = np.sum(dependency_matrix, axis=0)
+    queue = [i for i in range(num_tasks) if in_degree[i] == 0]
+    result = []
+
+    while queue:
+        current = queue.pop(0)
+        result.append(current)
+        successors = np.where(dependency_matrix[current, :] == 1)[0]
+        for successor in successors:
+            in_degree[successor] -= 1
+            if in_degree[successor] == 0:
+                queue.append(successor)
+
+    if len(result) != num_tasks:
+        return None
+    return result
+
+
+def find_critical_path(critical_tasks, dependency_matrix, task_order):
+    """Find the actual critical path sequence"""
+    print("In Use 3986")
+
+    if len(critical_tasks) == 0:
+        return []
+
+    critical_set = set(critical_tasks)
+    path = []
+    start_candidates = []
+    for task in critical_tasks:
+        predecessors = np.where(dependency_matrix[:, task] == 1)[0]
+        critical_predecessors = [p for p in predecessors if p in critical_set]
+        if len(critical_predecessors) == 0:
+            start_candidates.append(task)
+
+    if start_candidates:
+        current = start_candidates[0]
+        path.append(current)
+        while True:
+            successors = np.where(dependency_matrix[current, :] == 1)[0]
+            critical_successors = [s for s in successors if s in critical_set]
+            if critical_successors:
+                current = critical_successors[0]
+                path.append(current)
+            else:
+                break
+    return path

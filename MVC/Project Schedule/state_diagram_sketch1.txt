@@ -1,0 +1,65 @@
+Start: Ani's Pulse App Load
+|
+V
+Main View: Project List (Toggle: Grid / List / Spreadsheet)
+  - Displays Project Cards in Grid/List (current setup)
+  - Spreadsheet Toggle: Switch to tabular view (like current Ani's Pulse, showing columns for name, status, progress, etc.)
+|
+V (Click Project Card)
+Flip to Back Side (Quick Insights View)
+  - Show: Current tasks (list or cards), Risk level (yellow glow for medium, red for grave)
+  - Button: "View Full Project"
+|
+V (Click "View Full Project")
+Full Project View (Replaces/Overlays Project List)
+  - Interactive Gantt Chart
+    - Tasks as Cards (connected by lines/rubber bands for dependencies/predecessors)
+    - Each Card Shows: Length (duration), Risk Status (yellow/red glow based on calculated risk), Start/End Dates
+    - Subtasks: Nested under main tasks (expandable cards)
+  - Toggle: Switch to Spreadsheet View (tabular data for the project, e.g., columns for tasks, durations, risks)
+  - Back Button: Return to Project List
+|
+V (Click Individual Task Card in Gantt)
+Focus on Task (Detail Pane or Modal)
+  - Show: Start/End Dates, Duration, Predecessors (linked cards/lines), Risk Details (calculated via Python funcs)
+  - Subtasks: Displayed as sub-cards underneath (same interactive functionality, recursive)
+  - Actions: Edit/Delete Task (updates Gantt dynamically)
+|
+V (For Subtasks)
+Repeat Task Focus Flow (Recursive: Click subtask -> Show its details/sub-subtasks)
+|
+End: User Navigates Back or Edits Data (Updates flow dynamically via state)
+
+Additional Notes::
+
+## Business Plan Skeleton ##
+
+## Libraries Used (MVP)
+- **React (v18)**: Core framework. Free, MIT license.
+- **Tailwind CSS (v3)**: Styling for dark theme, cards, pulses. Free, MIT license.
+- **Lucide React**: Icons. Free, ISC license.
+- **React Router DOM**: Navigation. Free, MIT license.
+- **wx-react-gantt**: SVAR React Gantt for interactive Gantt charts. Free, GPLv3 license. Install: `npm install wx-react-gantt`. Supports card-like tasks via `taskRenderer`, dependencies, subtasks, and Tailwind integration for pulses (e.g., `animate-heartbeatYellow`).
+  - Alternative: Frappe Gantt (`npm install frappe-gantt`), MIT license, for simpler setups.
+- **AG Grid Community**: Spreadsheet view. Free, MIT license.
+
+## Backend: Python API and Database
+- **Python API**: FastAPI for risk calculations (`/calculate-risk` endpoint). Mock for MVP (e.g., `riskLevel: 'medium'` based on duration). Full Monte Carlo/PDE/SDEs post-MVP. Deploy on Vercel (free).
+- **Database**: MongoDB Atlas (free tier, 512MB) for user data (e.g., `{ userId, projects: [{ tasks: [{ riskLevel }] }] }`). Setup: Connect via `pymongo` in FastAPI. Scales to 800+ users (~$10/month upgrade).
+
+## Roadmap: Upgrade Triggers and Timeline
+- **Timeline**: Q2 2026 launch (May, ~33 weeks from Sep 2025) for polish, incorporation, and backend learning.
+  - **Sep–Nov 2025**: Frontend (SVAR Gantt via `wx-react-gantt`, pulses, modal). ~170 hours.
+  - **Dec 2025–Jan 2026**: FastAPI/MongoDB setup, LLC incorporation, Stripe. ~100 hours.
+  - **Jan–Feb 2026**: Apple/Google Play accounts, PWA testing. ~35 hours.
+  - **Feb–Apr 2026**: Beta (20–50 users), polish. ~120 hours.
+  - **May 2026**: Launch (100–200 users). ~40 hours.
+  - **Q4 2026**: Bryntum upgrade at 800+ users (3-month rollout).
+- **Triggers**: 800+ users, $10K revenue. 20% subscription growth post-Bryntum ($2,400/year).
+
+## Cost-Benefit Analysis
+- **Costs**: LLC ($200–$500), Apple/Google ($124), legal ($100–$200). Total: ~$424–$824 (Q1–Q2 2026).
+- **Benefits**: Clean launch enables subscriptions ($10/month premium). 20% growth post-Bryntum justifies $900/year.
+
+## Migration Plan
+- **SVAR to Bryntum**: At 800+ users (Q4 2026). Map `wx-react-gantt` data to Bryntum API (similar: tasks, links). 3-month rollout: Prep (Month 1), A/B test (Month 2), full deploy (Month 3).

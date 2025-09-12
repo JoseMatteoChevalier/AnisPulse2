@@ -16,9 +16,12 @@ from view import (
     render_basic_schedule_tab,  # NEW IMPORT
     render_simulation_results_plotly_test,
     render_dependency_tab,
-    render_classical_gantt,
+    render_classical_gantt_plotly_test,
+    render_classical_gantt_enhanced,
+    render_unified_gantt_test_tab,
+    render_pde_gantt_enhanced,
     render_pde_gantt,
-    render_eigenvalue_tab
+    render_eigenvalue_tab,
 )
 from project_templates import ProjectTemplates
 
@@ -39,6 +42,11 @@ def check_password():
     if st.session_state.get("password_correct", False):
         return True
 
+# subtle animation testing#
+
+
+
+
     # Show input for password.
     st.text_input(
         "🔒 Enter Password to Access Project Uncertainty Toolkit",
@@ -55,29 +63,22 @@ def check_password():
 
 
 # Add this at the very start of your main() function
-def main():
-    # Password protection - add this as the FIRST line in main()
-    if not check_password():
-        st.stop()
-
-    # Your existing code continues here...
-    st.set_page_config(
-        page_title="Project Management PDE Simulator",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-    # ... rest of your existing main() function
 
 def main():
 
-    if not check_password():
-        st.stop()
+
+    #if not check_password():
+    #    st.stop()
 
     st.set_page_config(
         page_title="Project Management PDE Simulator",
         layout="wide",
         initial_sidebar_state="expanded"
     )
+
+    #Subtle Animation Test#
+    add_subtle_animations()
+
 
     st.title("🚀 Project Management PDE Simulator")
     st.markdown("*Advanced project scheduling with reaction-diffusion modeling*")
@@ -108,7 +109,8 @@ def main():
         "📊 SDE Gantt",
         "📈 Simulation",
         "🔗 Dependencies",
-        "🧮 Eigenvalues"
+        "🧮 Eigenvalues",
+        "Unified Plot Test Zone"
     ]
     tabs = st.tabs(tab_names)
 
@@ -249,7 +251,12 @@ def main():
 
     # Tab 3: Classical Gantt
     with tabs[2]:
-        render_classical_gantt(model)
+        render_classical_gantt_enhanced(model)
+
+        st.markdown("---")
+
+        render_classical_gantt_plotly_test(model)
+
 
         st.markdown("---")
         st.info(
@@ -257,7 +264,7 @@ def main():
 
     # Tab 4: PDE Gantt
     with tabs[3]:
-        render_pde_gantt(model)
+        render_pde_gantt_enhanced(model)
 
         st.markdown("---")
         st.info("💡 **Note**: This shows the PDE simulation results with risk diffusion between dependent tasks.")
@@ -558,6 +565,11 @@ def main():
     with tabs[8]:
         render_eigenvalue_tab(model)
         # ... rest of eigenvalues tab code
+    # Tab 10: Testing Plotting Abstraction (HOT)
+    with tabs[9]:
+        render_unified_gantt_test_tab(model)
+        st.markdown("Here we go")
+
 
     # Status footer in sidebar
     st.sidebar.markdown("---")
@@ -600,6 +612,47 @@ def main():
     st.sidebar.caption("PDE Project Simulator v1.0")
     st.sidebar.caption("Built with Streamlit")
 
+
+def add_subtle_animations():
+    """
+    MINIMAL SAFE VERSION - Just basic hover effects and gentle transitions
+    No complex animations that could interfere with Streamlit's reactivity
+    """
+    st.markdown("""
+    <style>
+    /* Safe, subtle tab improvements */
+    .stTabs [data-baseweb="tab"] {
+        transition: background-color 0.2s ease, transform 0.15s ease;
+        border-radius: 6px;
+    }
+
+    /* Gentle hover effect - no scaling to avoid layout shifts */
+    .stTabs [data-baseweb="tab"]:hover {
+        background-color: rgba(76, 175, 80, 0.08);
+        transform: translateY(-1px);
+    }
+
+    /* Active tab subtle highlight */
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        background-color: rgba(76, 175, 80, 0.12);
+        border-left: 3px solid #4CAF50;
+    }
+
+    /* Subtle button improvements */
+    .stButton > button {
+        transition: background-color 0.2s ease;
+    }
+
+    /* Gentle metric card hover */
+    .stMetric {
+        transition: box-shadow 0.2s ease;
+    }
+
+    .stMetric:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
